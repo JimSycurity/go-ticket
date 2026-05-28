@@ -1,6 +1,6 @@
 ---
 id: gt-ag7g
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-05-28T13:22:23Z

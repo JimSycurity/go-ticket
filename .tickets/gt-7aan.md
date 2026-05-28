@@ -1,6 +1,6 @@
 ---
 id: gt-7aan
-status: open
+status: closed
 deps: [gt-gs0r, gt-wv7t]
 links: []
 created: 2026-05-28T18:39:07Z

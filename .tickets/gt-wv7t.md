@@ -1,6 +1,6 @@
 ---
 id: gt-wv7t
-status: open
+status: closed
 deps: [gt-81ev]
 links: []
 created: 2026-05-28T18:38:54Z
