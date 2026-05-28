@@ -1,14 +1,14 @@
 ## 1. Project Foundation
 
-- [ ] 1.1 Initialize the Go module, `cmd/gtk` command entrypoint, package layout, formatter, and baseline README usage notes.
-- [ ] 1.2 Add a minimal cross-platform test harness that can run on Linux, macOS, and Windows in CI.
-- [ ] 1.3 Add golden `.tickets/` fixtures produced by upstream `tk` for normal compatibility workflows.
-- [ ] 1.4 Add hand-authored edge fixtures for malformed, ambiguous, CRLF, and Windows-specific cases.
+- [x] 1.1 Initialize the Go module, `cmd/gtk` command entrypoint, package layout, formatter, and baseline README usage notes.
+- [x] 1.2 Add a minimal cross-platform test harness that can run on Linux, macOS, and Windows in CI.
+- [x] 1.3 Add golden `.tickets/` fixtures produced by upstream `tk` for normal compatibility workflows.
+- [x] 1.4 Add hand-authored edge fixtures for malformed, ambiguous, CRLF, and Windows-specific cases.
 
 ## 2. Ticket Storage Core
 
-- [ ] 2.1 Implement ticket directory discovery with `TICKETS_DIR` override and parent walking.
-- [ ] 2.1a Perform a focused path-security review for `TICKETS_DIR`, symlinked ticket roots, external roots, and write-target canonicalization before enabling write-capable commands.
+- [x] 2.1 Implement ticket directory discovery with `TICKETS_DIR` override and parent walking.
+- [x] 2.1a Perform a focused path-security review for `TICKETS_DIR`, symlinked ticket roots, external roots, and write-target canonicalization before enabling write-capable commands.
 - [ ] 2.2 Implement explicit `gtk init` that creates `.tickets/` only in the current directory and reports existing ticket roots safely.
 - [ ] 2.3 Implement Markdown/YAML frontmatter parsing for known fields while tolerating unknown fields.
 - [ ] 2.4 Implement stable ticket writing for create and mutation paths using same-directory atomic replacement.

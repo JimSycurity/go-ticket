@@ -100,6 +100,10 @@ The system SHALL provide core read commands for humans and agents.
 - **WHEN** the user runs `gtk list --json`
 - **THEN** the CLI SHALL print compact machine-readable JSON ticket summaries with raw ticket fields, project-relative file paths, absolute file paths, and no raw Markdown bodies or derived graph fields
 
+#### Scenario: JSON absolute path disclosure
+- **WHEN** the user runs `gtk list --json`
+- **THEN** the CLI documentation SHALL identify absolute paths as local-machine metadata that may expose usernames or repository locations when copied into logs or reports
+
 ### Requirement: Ready and blocked views
 The system SHALL classify open and in-progress tickets based on unresolved dependencies.
 

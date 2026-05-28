@@ -156,6 +156,11 @@
   - Decision: MVP discovery uses conservative ancestor `.tickets/` lookup plus canonicalized explicit overrides only. `TICKETS_DIR` must resolve to an existing directory before use. Symlink and external-root behavior require a focused security review before implementation.
   - Alternative considered: Freely accept relative `TICKETS_DIR` paths and symlinked directories; rejected until path-security implications are reviewed.
 
+- Use a conservative MVP path-security policy before enabling write commands.
+  - Rationale: Discovery and ticket path resolution are shared by every future mutation command, so the safe boundary should be enforced once rather than reimplemented per command.
+  - Decision: Ancestor-discovered `.tickets/` entries must be real directories; a `.tickets` path that exists but is not a directory is an error rather than a reason to continue walking upward. Explicit `TICKETS_DIR` must be absolute, existing, and non-symlinked; it may point outside the current working tree because it is an explicit environment override and the resolved root is marked as environment-selected. Ticket writes must resolve IDs through one containment-checked path helper that rejects path separators, traversal, drive-letter syntax, Windows reserved device names, symlinked ticket files, and non-regular existing targets.
+  - Alternative considered: Permit symlinked ticket roots and rely on canonicalization alone; rejected because it can hide where future writes will land.
+
 - Use both upstream-produced fixtures and hand-authored edge fixtures.
   - Rationale: Real files produced by upstream `tk` provide compatibility confidence, while hand-authored fixtures cover malformed, ambiguous, CRLF, and Windows-specific edge cases that are awkward to generate from upstream commands.
   - Alternative considered: Only write synthetic fixtures; rejected because it could drift from actual upstream output.

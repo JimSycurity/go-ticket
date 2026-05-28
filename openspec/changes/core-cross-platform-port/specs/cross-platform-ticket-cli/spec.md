@@ -34,15 +34,19 @@ The system SHALL locate the active ticket directory by first honoring `TICKETS_D
 
 #### Scenario: TICKETS_DIR override
 - **WHEN** `TICKETS_DIR` points to an existing ticket directory
-- **THEN** the CLI SHALL canonicalize that directory, verify it is an existing directory, and use the resolved path
+- **THEN** the CLI SHALL verify the override is absolute, existing, non-symlinked, and a directory, canonicalize it, mark the selected root as environment-selected, and use the resolved path
 
 #### Scenario: Invalid TICKETS_DIR override
 - **WHEN** `TICKETS_DIR` is set but does not resolve to an existing directory
 - **THEN** the CLI SHALL fail without falling back to ancestor discovery or creating files elsewhere
 
 #### Scenario: Parent directory discovery
-- **WHEN** the user runs `tk` in a nested subdirectory of a repository containing `.tickets/`
+- **WHEN** the user runs `gtk` in a nested subdirectory of a repository containing `.tickets/`
 - **THEN** the CLI SHALL find the ancestor `.tickets/` directory and use it
+
+#### Scenario: Non-directory tickets path
+- **WHEN** parent walking encounters a `.tickets` path that exists but is not a directory
+- **THEN** the CLI SHALL fail without walking past it to an ancestor ticket directory
 
 #### Scenario: Current directory is tickets directory
 - **WHEN** the user runs `gtk` from inside `.tickets/`
@@ -50,7 +54,7 @@ The system SHALL locate the active ticket directory by first honoring `TICKETS_D
 
 #### Scenario: Security-sensitive ticket root
 - **WHEN** implementation encounters symlinked ticket directories, relative overrides, or external roots
-- **THEN** behavior SHALL follow the security-reviewed path policy before write-capable commands are enabled
+- **THEN** behavior SHALL follow the security-reviewed path policy before write-capable commands are enabled, including rejecting symlinked discovered roots and symlinked `TICKETS_DIR` overrides in the MVP
 
 #### Scenario: Missing ticket directory
 - **WHEN** the user runs a read command and no ticket directory can be found
@@ -89,6 +93,10 @@ The system SHALL read and write Markdown ticket files using YAML frontmatter com
 #### Scenario: Atomic ticket mutation
 - **WHEN** the CLI mutates an existing ticket file
 - **THEN** it SHALL write the replacement through a temporary file in the same `.tickets/` directory and rename it over the original
+
+#### Scenario: Contained ticket write target
+- **WHEN** the CLI creates or mutates a ticket file
+- **THEN** it SHALL resolve the ticket ID through a single containment-checked path resolver that rejects traversal, path separators, drive-letter syntax, Windows reserved device names, symlinked ticket files, non-regular existing targets, and paths outside the active `.tickets/` directory
 
 #### Scenario: Newline normalization
 - **WHEN** the CLI creates or mutates a ticket file

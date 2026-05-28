@@ -10,6 +10,7 @@
 - [ ] 2.1 Implement `dep tree` and `dep cycle` with tests for deduplication, full traversal, missing tickets, and cycles.
 - [ ] 2.2 Implement `closed --limit=N` with mtime or documented ordering behavior.
 - [ ] 2.3 Implement `query` JSON output and the selected filter strategy.
+- [ ] 2.3a Define the plugin/editor execution security policy, including PATH lookup order, extension allowlist, `.ps1` handling, environment variables, editor argument handling, and shell interpolation rules.
 - [ ] 2.4 Implement plugin discovery and `super` bypass behavior for Unix and Windows command extensions.
 - [ ] 2.5 Implement `edit` with safe editor resolution and clear errors when no editor is configured.
 - [ ] 2.6 Implement `migrate-beads` with import reporting and conflict handling.

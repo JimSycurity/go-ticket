@@ -38,7 +38,11 @@ The system SHALL provide JSON output for tickets and support the chosen query fi
 - **THEN** the CLI SHALL apply the documented filter behavior or return a clear unsupported-filter error
 
 ### Requirement: Plugin compatibility
-The system SHALL support compatible plugin discovery and execution for custom commands.
+The system SHALL support compatible plugin discovery and execution for custom commands only after a documented plugin/editor execution security policy exists.
+
+#### Scenario: Plugin execution policy
+- **WHEN** plugin compatibility is implemented
+- **THEN** the implementation SHALL document and test PATH lookup order, extension allowlist, PowerShell script handling, environment variables passed to plugins, and no implicit shell interpolation
 
 #### Scenario: Unix plugin command
 - **WHEN** a Unix user has `tk-hello` or `ticket-hello` on PATH
