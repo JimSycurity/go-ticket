@@ -101,10 +101,12 @@ func TestPluginExecutesUnknownCommandWithMinimalTicketEnv(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("plugin returned %d stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, "plugin:world:"+filepath.Join(dir, ".tickets")) {
+	wantTicketsDir := canonicalTestPath(t, filepath.Join(dir, ".tickets"))
+	wantProjectDir := canonicalTestPath(t, dir)
+	if !strings.Contains(stdout, "plugin:world:"+wantTicketsDir) {
 		t.Fatalf("stdout = %q, want plugin output with TICKETS_DIR", stdout)
 	}
-	if !strings.Contains(stderr, "project:"+dir) {
+	if !strings.Contains(stderr, "project:"+wantProjectDir) {
 		t.Fatalf("stderr = %q, want project env", stderr)
 	}
 }
@@ -208,7 +210,7 @@ func TestEditUsesValidatedEditorAndPassesTicketPathAsSingleArg(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read editor marker: %v", err)
 	}
-	wantPath := filepath.Join(dir, ".tickets", id+".md")
+	wantPath := canonicalTestPath(t, filepath.Join(dir, ".tickets", id+".md"))
 	if string(data) != "1\n"+wantPath+"\n" {
 		t.Fatalf("editor marker = %q, want one arg path %q", string(data), wantPath)
 	}
@@ -891,7 +893,8 @@ func assertMockComprehensiveWarnings(t *testing.T, stderr string) {
 }
 
 func normalizeFixturePaths(fixtureDir string, value string) string {
-	normalized := strings.ReplaceAll(value, "\\", "/")
+	normalized := strings.ReplaceAll(value, `\\`, "/")
+	normalized = strings.ReplaceAll(normalized, "\\", "/")
 	fixture := strings.ReplaceAll(fixtureDir, "\\", "/")
 	return strings.ReplaceAll(normalized, fixture, "<FIXTURE>")
 }
@@ -945,6 +948,15 @@ func repoRoot(t *testing.T) string {
 		}
 		dir = parent
 	}
+}
+
+func canonicalTestPath(t *testing.T, path string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatalf("canonicalize %s: %v", path, err)
+	}
+	return resolved
 }
 
 func run(stdin *strings.Reader, args ...string) (string, string, int) {

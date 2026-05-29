@@ -47,7 +47,7 @@ jobs:
           fi
 
       - name: Run tests
-        run: go test ./...
+        run: go test -v ./...
 
       - name: Run vet
         if: runner.os == 'Linux'
