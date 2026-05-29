@@ -12,6 +12,8 @@ func noEnv(string) string { return "" }
 func TestDiscoverFindsAncestorTicketsDir(t *testing.T) {
 	root := t.TempDir()
 	mustMkdir(t, filepath.Join(root, TicketsDirName))
+	wantRoot := canonicalPath(t, root)
+	wantTickets := canonicalPath(t, filepath.Join(root, TicketsDirName))
 	nested := filepath.Join(root, "a", "b")
 	mustMkdir(t, nested)
 
@@ -19,11 +21,11 @@ func TestDiscoverFindsAncestorTicketsDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover returned error: %v", err)
 	}
-	if discovered.ProjectDir != root {
-		t.Fatalf("ProjectDir = %q, want %q", discovered.ProjectDir, root)
+	if discovered.ProjectDir != wantRoot {
+		t.Fatalf("ProjectDir = %q, want %q", discovered.ProjectDir, wantRoot)
 	}
-	if discovered.TicketsDir != filepath.Join(root, TicketsDirName) {
-		t.Fatalf("TicketsDir = %q", discovered.TicketsDir)
+	if discovered.TicketsDir != wantTickets {
+		t.Fatalf("TicketsDir = %q, want %q", discovered.TicketsDir, wantTickets)
 	}
 	if discovered.Source != RootSourceDiscovered {
 		t.Fatalf("Source = %q, want %q", discovered.Source, RootSourceDiscovered)
@@ -34,16 +36,18 @@ func TestDiscoverFromTicketsDir(t *testing.T) {
 	root := t.TempDir()
 	tickets := filepath.Join(root, TicketsDirName)
 	mustMkdir(t, tickets)
+	wantRoot := canonicalPath(t, root)
+	wantTickets := canonicalPath(t, tickets)
 
 	discovered, err := Discover(tickets, noEnv)
 	if err != nil {
 		t.Fatalf("Discover returned error: %v", err)
 	}
-	if discovered.ProjectDir != root {
-		t.Fatalf("ProjectDir = %q, want %q", discovered.ProjectDir, root)
+	if discovered.ProjectDir != wantRoot {
+		t.Fatalf("ProjectDir = %q, want %q", discovered.ProjectDir, wantRoot)
 	}
-	if discovered.TicketsDir != tickets {
-		t.Fatalf("TicketsDir = %q, want %q", discovered.TicketsDir, tickets)
+	if discovered.TicketsDir != wantTickets {
+		t.Fatalf("TicketsDir = %q, want %q", discovered.TicketsDir, wantTickets)
 	}
 	if discovered.Source != RootSourceDiscovered {
 		t.Fatalf("Source = %q, want %q", discovered.Source, RootSourceDiscovered)
@@ -54,19 +58,20 @@ func TestDiscoverUsesAbsoluteTicketsDirOverride(t *testing.T) {
 	root := t.TempDir()
 	tickets := filepath.Join(root, TicketsDirName)
 	mustMkdir(t, tickets)
+	wantTickets := canonicalPath(t, tickets)
 	other := t.TempDir()
 
 	discovered, err := Discover(other, func(key string) string {
 		if key == "TICKETS_DIR" {
-			return tickets
+			return wantTickets
 		}
 		return ""
 	})
 	if err != nil {
 		t.Fatalf("Discover returned error: %v", err)
 	}
-	if discovered.TicketsDir != tickets {
-		t.Fatalf("TicketsDir = %q, want %q", discovered.TicketsDir, tickets)
+	if discovered.TicketsDir != wantTickets {
+		t.Fatalf("TicketsDir = %q, want %q", discovered.TicketsDir, wantTickets)
 	}
 	if discovered.Source != RootSourceEnv {
 		t.Fatalf("Source = %q, want %q", discovered.Source, RootSourceEnv)
@@ -210,4 +215,13 @@ func mustMkdir(t *testing.T, path string) {
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", path, err)
 	}
+}
+
+func canonicalPath(t *testing.T, path string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatalf("canonicalize %s: %v", path, err)
+	}
+	return resolved
 }
