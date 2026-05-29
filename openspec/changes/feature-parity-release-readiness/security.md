@@ -9,7 +9,7 @@ This review covers the proposed feature-parity and release-readiness tasks for
 external issue data, read repository-controlled settings, write ticket files, or
 publish release artifacts.
 
-Current MVP safety primitives are favorable: ticket discovery rejects symlinked
+Current safety primitives are favorable: ticket discovery rejects symlinked
 `.tickets` roots, explicit `TICKETS_DIR` must be absolute and non-symlinked,
 ticket writes flow through `ticket.Write`, and `ResolveTicketPath` rejects
 unsafe IDs, traversal, symlink ticket files, non-regular targets, and

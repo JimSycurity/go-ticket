@@ -1,6 +1,6 @@
 ## Context
 
-The MVP focuses on a native Go port of the highest-value ticket workflows. The follow-up parity phase turns that usable core into a credible replacement for upstream `wedow/ticket`, including commands that rely on shell behavior today, release engineering, documentation, and migration confidence.
+The initial cross-platform port focused on the highest-value ticket workflows. This follow-up parity phase turns that usable core into a credible replacement for upstream `wedow/ticket`, including commands that rely on shell behavior today, release engineering, documentation, and migration confidence.
 
 ## Goals / Non-Goals
 
@@ -36,7 +36,7 @@ The MVP focuses on a native Go port of the highest-value ticket workflows. The f
 
 - Add an optional lightweight settings file under `.tickets/` for configurable behavior.
   - Rationale: Prefixes and project-level behavior should be customizable without changing ticket files or requiring environment variables, while absent settings preserve upstream-compatible defaults.
-  - Alternative considered: Add settings during MVP; rejected because default compatibility matters more than configuration before the core is stable.
+  - Alternative considered: Add settings during the initial port; rejected because default compatibility mattered more than configuration before the core was stable.
 
 - Use release automation rather than manual artifact creation.
   - Rationale: Windows support is the point of the project; every release should prove Windows builds and tests still work.

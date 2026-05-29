@@ -10,6 +10,10 @@ grep, or ripgrep for the supported command set.
 The primary binary is currently named `gtk` so it can be tested side-by-side
 with upstream `tk`.
 
+If you are ready to use `go-ticket` as your default ticket CLI, you can install
+`gtk` on PATH and update your tools to call `gtk`, or create your own `tk`
+wrapper/symlink after you intentionally decide to replace upstream `tk`.
+
 ## Current Features
 
 - Initialize and discover `.tickets/` repositories, including `TICKETS_DIR`
@@ -44,6 +48,9 @@ go build -o /tmp/gtk ./cmd/gtk
 For releases, download the archive for your OS and architecture from GitHub
 Releases, verify the checksum in `SHA256SUMS`, then place `gtk` or `gtk.exe` on
 your PATH.
+
+Editor integrations such as `vscode-tk` should point their ticket command
+setting at `gtk` while both implementations are installed.
 
 ## Basic Usage
 
