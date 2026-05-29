@@ -1,0 +1,60 @@
+[
+  {
+    "id": "ub-4vbh",
+    "status": "open",
+    "deps": [],
+    "links": [
+      "ub-0hf0"
+    ],
+    "created": "2026-05-28T18:41:07Z",
+    "type": "epic",
+    "priority": "1",
+    "assignee": "Jim Sykora",
+    "tags": [
+      "upstream",
+      "fixture"
+    ],
+    "title": "Upstream parent ticket",
+    "rel_path": ".tickets/ub-4vbh.md",
+    "abs_path": "<FIXTURE>/.tickets/ub-4vbh.md"
+  },
+  {
+    "id": "ub-0hf0",
+    "status": "open",
+    "deps": [
+      "ub-05xk"
+    ],
+    "links": [
+      "ub-4vbh"
+    ],
+    "created": "2026-05-28T18:41:15Z",
+    "type": "task",
+    "priority": "2",
+    "assignee": "Jim Sykora",
+    "parent": "ub-4vbh",
+    "tags": [
+      "upstream",
+      "fixture"
+    ],
+    "title": "Upstream child ticket",
+    "rel_path": ".tickets/ub-0hf0.md",
+    "abs_path": "<FIXTURE>/.tickets/ub-0hf0.md"
+  },
+  {
+    "id": "ub-05xk",
+    "status": "open",
+    "deps": [],
+    "links": [],
+    "created": "2026-05-28T18:41:25Z",
+    "type": "task",
+    "priority": "3",
+    "assignee": "Jim Sykora",
+    "tags": [
+      "upstream",
+      "fixture"
+    ],
+    "title": "Upstream dependency ticket",
+    "rel_path": ".tickets/ub-05xk.md",
+    "abs_path": "<FIXTURE>/.tickets/ub-05xk.md"
+  }
+]

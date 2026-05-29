@@ -1,9 +1,9 @@
 ## 1. Compatibility Baseline
 
-- [ ] 1.1 Create a command compatibility matrix covering upstream documented commands and plugin behavior.
-- [ ] 1.2 Add fixture repositories generated from representative upstream-compatible `.tickets/` files.
-- [ ] 1.3 Add golden command-output tests for parity-sensitive behavior.
-- [ ] 1.4 Decide and document whether byte-for-byte output compatibility is required per command.
+- [x] 1.1 Create a command compatibility matrix covering upstream documented commands and plugin behavior.
+- [x] 1.2 Add fixture repositories generated from representative upstream-compatible `.tickets/` files.
+- [x] 1.3 Add golden command-output tests for parity-sensitive behavior.
+- [x] 1.4 Decide and document whether byte-for-byte output compatibility is required per command.
 
 ## 2. Parity Commands
 

@@ -25,10 +25,12 @@ The MVP focuses on a native Go port of the highest-value ticket workflows. The f
 
 - Implement plugin lookup as a cross-platform command resolution layer.
   - Rationale: Unix users expect `tk-<cmd>` and `ticket-<cmd>` from PATH; Windows users need `.exe`, `.cmd`, `.bat`, and optionally `.ps1` handling.
-  - Alternative considered: Drop plugins; rejected for parity, but plugin execution should receive explicit security review.
+  - Current decision: Plugin execution remains security-gated and should not be implemented until a full plugin security review is complete and concrete user value is clear.
+  - Alternative considered: Drop plugins; rejected for parity, but plugin execution should receive explicit security review before implementation.
 
 - Support `query` through either embedded jq-compatible evaluation or a documented external `jq` fallback.
   - Rationale: `query` is useful for agents and scripts, but native Windows should not require users to install Unix tooling for basic JSON output.
+  - Current decision: Filtering strategy remains open; establish JSON shape and compatibility tests before selecting embedded evaluation, external `jq`, or documented unsupported filters.
   - Alternative considered: JSON-only query with no filter language; acceptable only if documented as a compatibility limitation.
 
 - Add an optional lightweight settings file under `.tickets/` for configurable behavior.
@@ -37,10 +39,14 @@ The MVP focuses on a native Go port of the highest-value ticket workflows. The f
 
 - Use release automation rather than manual artifact creation.
   - Rationale: Windows support is the point of the project; every release should prove Windows builds and tests still work.
+  - Current decision: Exact release artifact scope remains open; start with simple archives and checksums unless later package-manager or completion requirements become concrete.
+
+- Treat Beads migration as good-enough import with review and rollback rather than perfect fidelity.
+  - Rationale: The project should help users leave Beads, but the first migration pass should prioritize clear import reporting, conflict handling, and safe rollback over exhaustive historical parity.
 
 ## Risks / Trade-offs
 
-- Plugin execution can run arbitrary PATH commands -> require explicit docs, tests, and security review before enabling.
+- Plugin execution can run arbitrary PATH commands -> require explicit docs, tests, concrete use cases, and security review before enabling.
 - `query` compatibility may pull in a nontrivial dependency -> isolate evaluator logic behind a small interface.
 - Beads migration input may be messy or untrusted -> parse defensively and never overwrite existing tickets without explicit behavior.
 - Release workflows can fail from platform-specific packaging assumptions -> build simple archives first, then add installers later if needed.
@@ -54,5 +60,4 @@ Users should be able to install `go-ticket`, run read-only parity checks against
 
 - Should `query` embed a jq-compatible evaluator or require external `jq` only for filtered queries?
 - Should release artifacts include shell completions, package manager manifests, or just archives/checksums at first?
-- How much plugin compatibility should be enabled by default on Windows, especially PowerShell scripts?
 - Should parity tests invoke the upstream Bash `ticket` script on POSIX as a differential oracle?

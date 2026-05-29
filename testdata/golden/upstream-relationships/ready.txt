@@ -1,0 +1,2 @@
+gtur-ngln [P1][open] - Parity parent
+gtur-774o [P2][open] - Parity child

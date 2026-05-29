@@ -194,6 +194,19 @@ func TestListWarnsAndContinuesForMalformedTicket(t *testing.T) {
 	}
 }
 
+func TestGoldenOutputForUpstreamBasicList(t *testing.T) {
+	assertGoldenCommand(t, "upstream-basic", "list.txt", nil, "list")
+}
+
+func TestGoldenOutputForUpstreamBasicListJSON(t *testing.T) {
+	assertGoldenCommand(t, "upstream-basic", "list.json", normalizeFixturePaths, "list", "--json")
+}
+
+func TestGoldenOutputForUpstreamRelationshipsReadyBlocked(t *testing.T) {
+	assertGoldenCommand(t, "upstream-relationships", "ready.txt", nil, "ready")
+	assertGoldenCommand(t, "upstream-relationships", "blocked.txt", nil, "blocked")
+}
+
 func TestAddNoteRejectsOversizedStdin(t *testing.T) {
 	chdir(t, t.TempDir())
 	mustRun(t, "init")
@@ -206,6 +219,63 @@ func TestAddNoteRejectsOversizedStdin(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "note exceeds") {
 		t.Fatalf("stderr = %q, want note exceeds", stderr)
+	}
+}
+
+func assertGoldenCommand(t *testing.T, fixtureName string, goldenName string, normalize func(string, string) string, args ...string) {
+	t.Helper()
+	root := repoRoot(t)
+	fixtureDir := filepath.Join(root, "testdata", "fixtures", fixtureName)
+	goldenPath := filepath.Join(root, "testdata", "golden", fixtureName, goldenName)
+	absFixture, err := filepath.Abs(fixtureDir)
+	if err != nil {
+		t.Fatalf("resolve fixture path: %v", err)
+	}
+	chdir(t, fixtureDir)
+
+	stdout, stderr, code := run(nil, args...)
+	if code != 0 {
+		t.Fatalf("%v returned %d stderr=%q", args, code, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("%v stderr = %q, want empty", args, stderr)
+	}
+	wantBytes, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("read golden %s: %v", goldenPath, err)
+	}
+	got := stdout
+	want := string(wantBytes)
+	if normalize != nil {
+		got = normalize(absFixture, got)
+		want = normalize(absFixture, want)
+	}
+	if got != want {
+		t.Fatalf("%v output mismatch\nwant:\n%s\ngot:\n%s", args, want, got)
+	}
+}
+
+func normalizeFixturePaths(fixtureDir string, value string) string {
+	normalized := strings.ReplaceAll(value, "\\", "/")
+	fixture := strings.ReplaceAll(fixtureDir, "\\", "/")
+	return strings.ReplaceAll(normalized, fixture, "<FIXTURE>")
+}
+
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatalf("could not find repo root from %s", dir)
+		}
+		dir = parent
 	}
 }
 
