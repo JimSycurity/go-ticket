@@ -3,6 +3,7 @@ package app
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -974,7 +975,7 @@ func migrateBeads(root ticket.Root, sourcePath string, dryRun bool, stdout io.Wr
 			report.skipped++
 			fmt.Fprintf(stdout, "skip %s: ticket already exists\n", issue.ID)
 			continue
-		} else if !os.IsNotExist(err) && !strings.Contains(err.Error(), "no such file") {
+		} else if !errors.Is(err, os.ErrNotExist) {
 			report.review++
 			fmt.Fprintf(stdout, "review %s: %v\n", issue.ID, err)
 			continue

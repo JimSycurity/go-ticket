@@ -420,7 +420,7 @@ func GenerateID(root Root) (string, error) {
 			return "", err
 		}
 		id := prefix + "-" + suffix
-		if _, err := ResolveTicketPath(root, id, true); os.IsNotExist(err) || strings.Contains(err.Error(), "no such file") {
+		if _, err := ResolveTicketPath(root, id, true); errors.Is(err, os.ErrNotExist) {
 			return id, nil
 		}
 		if _, err := Resolve(root, id); errors.Is(err, ErrMissingID) {
