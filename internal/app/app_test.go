@@ -865,7 +865,7 @@ func assertGoldenCommand(t *testing.T, fixtureName string, goldenName string, no
 		t.Fatalf("read golden %s: %v", goldenPath, err)
 	}
 	got := stdout
-	want := string(wantBytes)
+	want := strings.ReplaceAll(string(wantBytes), "\r\n", "\n")
 	if normalize != nil {
 		got = normalize(absFixture, got)
 		want = normalize(absFixture, want)
