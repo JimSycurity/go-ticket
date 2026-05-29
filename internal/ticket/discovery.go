@@ -36,6 +36,9 @@ func Discover(startDir string, lookup EnvLookup) (Root, error) {
 	if err != nil {
 		return Root{}, fmt.Errorf("resolve start directory: %w", err)
 	}
+	if filepath.Base(start) == TicketsDirName {
+		return rootFromCandidate(filepath.Dir(start), start)
+	}
 	start, err = filepath.EvalSymlinks(start)
 	if err != nil {
 		return Root{}, fmt.Errorf("canonicalize start directory: %w", err)
@@ -50,7 +53,7 @@ func Discover(startDir string, lookup EnvLookup) (Root, error) {
 	}
 
 	if filepath.Base(start) == TicketsDirName {
-		return Root{ProjectDir: filepath.Dir(start), TicketsDir: start, Source: RootSourceDiscovered}, nil
+		return rootFromCandidate(filepath.Dir(start), start)
 	}
 
 	for dir := start; ; dir = filepath.Dir(dir) {
@@ -75,19 +78,23 @@ func discoverOverride(path string) (Root, error) {
 	if !filepath.IsAbs(path) {
 		return Root{}, fmt.Errorf("TICKETS_DIR must be an absolute path before path-security review is complete: %s", path)
 	}
-	info, err := os.Lstat(path)
+	cleanPath := filepath.Clean(path)
+	info, err := os.Lstat(cleanPath)
 	if err != nil {
 		return Root{}, fmt.Errorf("stat TICKETS_DIR: %w", err)
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
-		return Root{}, fmt.Errorf("symlinked TICKETS_DIR requires path-security review before use: %s", path)
+		return Root{}, fmt.Errorf("symlinked TICKETS_DIR requires path-security review before use: %s", cleanPath)
 	}
 	if !info.IsDir() {
-		return Root{}, fmt.Errorf("TICKETS_DIR is not a directory: %s", path)
+		return Root{}, fmt.Errorf("TICKETS_DIR is not a directory: %s", cleanPath)
 	}
-	resolved, err := filepath.EvalSymlinks(path)
+	resolved, err := filepath.EvalSymlinks(cleanPath)
 	if err != nil {
 		return Root{}, fmt.Errorf("canonicalize TICKETS_DIR: %w", err)
+	}
+	if filepath.Clean(resolved) != cleanPath {
+		return Root{}, fmt.Errorf("TICKETS_DIR path contains symlink indirection: %s", cleanPath)
 	}
 	info, err = os.Stat(resolved)
 	if err != nil {

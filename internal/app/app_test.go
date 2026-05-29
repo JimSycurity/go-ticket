@@ -17,7 +17,7 @@ func TestHelpOnlyShowsMVPCommands(t *testing.T) {
 		t.Fatalf("Run returned %d, want 0", code)
 	}
 	output := stdout.String()
-	for _, want := range []string{"gtk - Go ticket MVP CLI", "create", "list, ls", "add-note"} {
+	for _, want := range []string{"gtk - Go ticket MVP CLI", "create", "list, ls", "add-note", "version"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("help missing %q in:\n%s", want, output)
 		}
@@ -26,6 +26,41 @@ func TestHelpOnlyShowsMVPCommands(t *testing.T) {
 		if strings.Contains(output, unexpected) {
 			t.Fatalf("help unexpectedly includes %q in:\n%s", unexpected, output)
 		}
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestVersionShowsBuildMetadata(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := Run([]string{"version"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run returned %d, want 0", code)
+	}
+	output := stdout.String()
+	for _, want := range []string{"gtk version:", "commit:", "dirty:", "vcs_time:", "build_date:", "binary:", "binary_mtime:"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("version missing %q in:\n%s", want, output)
+		}
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestDashDashVersionShowsBuildMetadata(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := Run([]string{"--version"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run returned %d, want 0", code)
+	}
+	if !strings.Contains(stdout.String(), "gtk version:") {
+		t.Fatalf("stdout = %q, want version output", stdout.String())
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
@@ -156,6 +191,21 @@ func TestListWarnsAndContinuesForMalformedTicket(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "warning:") {
 		t.Fatalf("stderr = %q, want warning", stderr)
+	}
+}
+
+func TestAddNoteRejectsOversizedStdin(t *testing.T) {
+	chdir(t, t.TempDir())
+	mustRun(t, "init")
+	id := strings.TrimSpace(mustRun(t, "create", "Big note"))
+	bigNote := strings.NewReader(strings.Repeat("x", (64<<10)+1))
+
+	_, stderr, code := run(bigNote, "add-note", id)
+	if code == 0 {
+		t.Fatal("add-note succeeded for oversized stdin")
+	}
+	if !strings.Contains(stderr, "note exceeds") {
+		t.Fatalf("stderr = %q, want note exceeds", stderr)
 	}
 }
 

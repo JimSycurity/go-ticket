@@ -7,11 +7,18 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/JimSycurity/go-ticket/internal/ticket"
+)
+
+var (
+	Version   = "dev"
+	Commit    = ""
+	BuildDate = ""
 )
 
 const helpText = `gtk - Go ticket MVP CLI
@@ -34,6 +41,7 @@ Commands:
   ready                List tickets whose dependencies are resolved
   blocked              List tickets with unresolved dependencies
   add-note             Append a timestamped note
+  version              Show build and VCS metadata
 
 MVP intentionally does not execute plugins.
 `
@@ -70,6 +78,9 @@ func RunWithIO(args []string, stdin io.Reader, stdout io.Writer, stderr io.Write
 	switch command {
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, helpText)
+		return 0
+	case "version", "--version":
+		printVersion(stdout)
 		return 0
 	case "init":
 		err = runInit(stdout)
@@ -192,7 +203,7 @@ func runShow(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	data, err := os.ReadFile(t.Path)
+	data, err := ticket.ReadRawFile(t.Path)
 	if err != nil {
 		return err
 	}
@@ -353,11 +364,17 @@ func runAddNote(args []string, stdin io.Reader, stdout io.Writer) error {
 	}
 	text := strings.TrimSpace(strings.Join(args[1:], " "))
 	if text == "" {
-		data, err := io.ReadAll(stdin)
+		data, err := io.ReadAll(io.LimitReader(stdin, ticket.MaxNoteBytes+1))
 		if err != nil {
 			return err
 		}
+		if len(data) > ticket.MaxNoteBytes {
+			return fmt.Errorf("note exceeds %d byte limit", ticket.MaxNoteBytes)
+		}
 		text = string(data)
+	}
+	if len([]byte(text)) > ticket.MaxNoteBytes {
+		return fmt.Errorf("note exceeds %d byte limit", ticket.MaxNoteBytes)
 	}
 	return mutateOne(args[0], stdout, func(t ticket.Ticket) (ticket.Ticket, error) {
 		return ticket.AppendNote(t, text, time.Now()), nil
@@ -399,6 +416,56 @@ func printWarnings(warnings []ticket.Warning, stderr io.Writer) {
 	for _, warning := range warnings {
 		fmt.Fprintf(stderr, "warning: %s\n", warning.Error())
 	}
+}
+
+func printVersion(stdout io.Writer) {
+	settings := buildSettings()
+	commit := firstNonEmpty(Commit, settings["vcs.revision"], "unknown")
+	vcsTime := firstNonEmpty(settings["vcs.time"], "unknown")
+	buildDate := firstNonEmpty(BuildDate, "unknown")
+	dirty := firstNonEmpty(settings["vcs.modified"], "unknown")
+	binaryPath, binaryMTime := executableMetadata()
+
+	fmt.Fprintf(stdout, "gtk version: %s\n", Version)
+	fmt.Fprintf(stdout, "commit: %s\n", commit)
+	fmt.Fprintf(stdout, "dirty: %s\n", dirty)
+	fmt.Fprintf(stdout, "vcs_time: %s\n", vcsTime)
+	fmt.Fprintf(stdout, "build_date: %s\n", buildDate)
+	fmt.Fprintf(stdout, "binary: %s\n", binaryPath)
+	fmt.Fprintf(stdout, "binary_mtime: %s\n", binaryMTime)
+}
+
+func buildSettings() map[string]string {
+	settings := map[string]string{}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return settings
+	}
+	for _, setting := range info.Settings {
+		settings[setting.Key] = setting.Value
+	}
+	return settings
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func executableMetadata() (string, string) {
+	path, err := os.Executable()
+	if err != nil {
+		return "unknown", "unknown"
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return path, "unknown"
+	}
+	return path, info.ModTime().UTC().Format(time.RFC3339)
 }
 
 func filterTickets(tickets []ticket.Ticket, status string, assignee string, ticketType string) []ticket.Ticket {

@@ -120,3 +120,71 @@ func TestWritePreservesUnknownFieldsAndNormalizesLF(t *testing.T) {
 		t.Fatalf("content did not preserve custom field:\n%s", content)
 	}
 }
+
+func TestWriteRejectsFrontmatterNewlineInjection(t *testing.T) {
+	root := Root{ProjectDir: t.TempDir()}
+	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)
+	mustMkdir(t, root.TicketsDir)
+	ticket := Ticket{
+		ID:       "gt-inject",
+		Status:   "open",
+		Deps:     []string{},
+		Links:    []string{},
+		Created:  "2026-05-28T00:00:00Z",
+		Type:     "task",
+		Priority: "2",
+		Assignee: "codex\nstatus: closed",
+		Title:    "Injection",
+		Body:     "# Injection\n",
+	}
+
+	err := Write(root, ticket)
+	if err == nil {
+		t.Fatal("Write succeeded with newline injection in frontmatter")
+	}
+	if !strings.Contains(err.Error(), "contains a newline") {
+		t.Fatalf("error = %q, want newline message", err.Error())
+	}
+	if _, statErr := os.Stat(filepath.Join(root.TicketsDir, "gt-inject.md")); !os.IsNotExist(statErr) {
+		t.Fatalf("ticket file exists after rejected write: %v", statErr)
+	}
+}
+
+func TestResolveRejectsTargetedSymlinkBeforeRead(t *testing.T) {
+	root := Root{ProjectDir: t.TempDir()}
+	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)
+	mustMkdir(t, root.TicketsDir)
+	target := filepath.Join(root.TicketsDir, "target.md")
+	if err := os.WriteFile(target, []byte("---\nid: target\nstatus: open\ndeps: []\nlinks: []\n---\n# Target\n"), 0o644); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	link := filepath.Join(root.TicketsDir, "gt-link.md")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	_, err := Resolve(root, "gt-link")
+	if err == nil {
+		t.Fatal("Resolve succeeded for symlinked targeted ticket")
+	}
+	if !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("error = %q, want symlink message", err.Error())
+	}
+}
+
+func TestReadRawFileRejectsOversizedTicket(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "gt-large.md")
+	content := strings.Repeat("x", MaxTicketFileBytes+1)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write large ticket: %v", err)
+	}
+
+	_, err := ReadRawFile(path)
+	if err == nil {
+		t.Fatal("ReadRawFile succeeded for oversized ticket")
+	}
+	if !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("error = %q, want exceeds message", err.Error())
+	}
+}

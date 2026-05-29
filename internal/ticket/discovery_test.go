@@ -164,6 +164,47 @@ func TestDiscoverRejectsSymlinkedTicketsDirOverride(t *testing.T) {
 	}
 }
 
+func TestDiscoverRejectsTicketsDirOverrideWithSymlinkedParent(t *testing.T) {
+	root := t.TempDir()
+	targetParent := filepath.Join(root, "target-parent")
+	mustMkdir(t, filepath.Join(targetParent, TicketsDirName))
+	linkParent := filepath.Join(root, "link-parent")
+	if err := os.Symlink(targetParent, linkParent); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	_, err := Discover(root, func(key string) string {
+		if key == "TICKETS_DIR" {
+			return filepath.Join(linkParent, TicketsDirName)
+		}
+		return ""
+	})
+	if err == nil {
+		t.Fatal("Discover succeeded for TICKETS_DIR with symlinked parent")
+	}
+	if !strings.Contains(err.Error(), "symlink indirection") {
+		t.Fatalf("error = %q, want symlink indirection message", err.Error())
+	}
+}
+
+func TestDiscoverRejectsSymlinkedTicketsDirWhenCwdIsTicketsDir(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "target")
+	mustMkdir(t, target)
+	link := filepath.Join(root, TicketsDirName)
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	_, err := Discover(link, noEnv)
+	if err == nil {
+		t.Fatal("Discover succeeded when cwd path was symlinked .tickets")
+	}
+	if !strings.Contains(err.Error(), "symlinked .tickets") {
+		t.Fatalf("error = %q, want symlinked .tickets message", err.Error())
+	}
+}
+
 func mustMkdir(t *testing.T, path string) {
 	t.Helper()
 	if err := os.MkdirAll(path, 0o755); err != nil {

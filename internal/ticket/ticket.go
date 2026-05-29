@@ -5,12 +5,18 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 	"unicode"
+)
+
+const (
+	MaxTicketFileBytes = 1 << 20
+	MaxNoteBytes       = 64 << 10
 )
 
 type Ticket struct {
@@ -52,7 +58,7 @@ var (
 )
 
 func ParseFile(root Root, path string) (Ticket, error) {
-	data, err := os.ReadFile(path)
+	data, err := ReadRawFile(path)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -208,12 +214,18 @@ func Resolve(root Root, ref string) (Ticket, error) {
 	if len(matches) > 1 {
 		return Ticket{}, fmt.Errorf("%w: %s matches %s", ErrAmbiguousID, ref, strings.Join(matchIDs(matches), ", "))
 	}
+	if _, err := checkedRegularFile(matches[0]); err != nil {
+		return Ticket{}, err
+	}
 	return ParseFile(root, matches[0])
 }
 
 func Write(root Root, t Ticket) error {
 	path, err := ResolveTicketPath(root, t.ID, false)
 	if err != nil {
+		return err
+	}
+	if err := ValidateForWrite(t); err != nil {
 		return err
 	}
 	content := Render(t)
@@ -230,12 +242,77 @@ func Write(root Root, t Ticket) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
+	if err := replaceFile(tmpPath, path); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ReadRawFile(path string) ([]byte, error) {
+	info, err := checkedRegularFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() > MaxTicketFileBytes {
+		return nil, fmt.Errorf("ticket file exceeds %d byte limit: %s", MaxTicketFileBytes, path)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, MaxTicketFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > MaxTicketFileBytes {
+		return nil, fmt.Errorf("ticket file exceeds %d byte limit: %s", MaxTicketFileBytes, path)
+	}
+	return data, nil
+}
+
+func ValidateForWrite(t Ticket) error {
+	if err := ValidateID(t.ID); err != nil {
+		return err
+	}
+	for key, value := range map[string]string{
+		"status":       t.Status,
+		"created":      t.Created,
+		"type":         t.Type,
+		"priority":     t.Priority,
+		"assignee":     t.Assignee,
+		"external-ref": t.ExternalRef,
+		"parent":       t.Parent,
+	} {
+		if err := validateFrontmatterScalar(key, value); err != nil {
 			return err
 		}
-		if renameErr := os.Rename(tmpPath, path); renameErr != nil {
-			return renameErr
+	}
+	if t.Parent != "" {
+		if err := ValidateID(t.Parent); err != nil {
+			return fmt.Errorf("invalid parent: %w", err)
+		}
+	}
+	for _, list := range []struct {
+		name   string
+		values []string
+	}{
+		{name: "deps", values: t.Deps},
+		{name: "links", values: t.Links},
+		{name: "tags", values: t.Tags},
+	} {
+		for _, value := range list.values {
+			if err := validateListAtom(list.name, value); err != nil {
+				return err
+			}
+		}
+	}
+	for _, field := range t.Unknown {
+		if err := validateFieldKey(field.Key); err != nil {
+			return err
+		}
+		if err := validateFrontmatterScalar(field.Key, field.Value); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -350,6 +427,16 @@ func AppendNote(t Ticket, text string, now time.Time) Ticket {
 	body += "\n\n**" + now.UTC().Format(time.RFC3339) + "**\n\n" + text + "\n"
 	t.Body = body
 	return t
+}
+
+func ValidateID(id string) error {
+	if !ticketIDPattern.MatchString(id) {
+		return fmt.Errorf("invalid ticket ID %q: use letters, numbers, underscore, or hyphen only", id)
+	}
+	if _, reserved := windowsReservedNames[strings.ToUpper(id)]; reserved {
+		return fmt.Errorf("invalid ticket ID %q: reserved Windows device name", id)
+	}
+	return nil
 }
 
 func IsWorkStatus(status string) bool {
@@ -478,4 +565,47 @@ func matchIDs(paths []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func checkedRegularFile(path string) (os.FileInfo, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("ticket file is a symlink: %s", path)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("ticket path is not a regular file: %s", path)
+	}
+	return info, nil
+}
+
+func validateFieldKey(key string) error {
+	if key == "" {
+		return fmt.Errorf("frontmatter key cannot be empty")
+	}
+	for _, r := range key {
+		if r == '\r' || r == '\n' || r == ':' || unicode.IsSpace(r) {
+			return fmt.Errorf("invalid frontmatter key %q", key)
+		}
+	}
+	return nil
+}
+
+func validateFrontmatterScalar(key string, value string) error {
+	if strings.ContainsAny(value, "\r\n") {
+		return fmt.Errorf("frontmatter field %q contains a newline", key)
+	}
+	return nil
+}
+
+func validateListAtom(key string, value string) error {
+	if value == "" {
+		return fmt.Errorf("frontmatter list %q contains an empty value", key)
+	}
+	if strings.ContainsAny(value, "\r\n,[]") {
+		return fmt.Errorf("frontmatter list %q contains unsafe value %q", key, value)
+	}
+	return nil
 }

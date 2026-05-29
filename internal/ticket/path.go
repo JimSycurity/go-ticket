@@ -36,11 +36,8 @@ var windowsReservedNames = map[string]struct{}{
 }
 
 func ResolveTicketPath(root Root, id string, mustExist bool) (string, error) {
-	if !ticketIDPattern.MatchString(id) {
-		return "", fmt.Errorf("invalid ticket ID %q: use letters, numbers, underscore, or hyphen only", id)
-	}
-	if _, reserved := windowsReservedNames[strings.ToUpper(id)]; reserved {
-		return "", fmt.Errorf("invalid ticket ID %q: reserved Windows device name", id)
+	if err := ValidateID(id); err != nil {
+		return "", err
 	}
 
 	ticketsDir, err := filepath.Abs(root.TicketsDir)
