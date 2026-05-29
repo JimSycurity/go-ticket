@@ -33,43 +33,58 @@ Status legend:
 | `reopen <id>` | Supported | Semantic | Sets status to `open`. |
 | `status <id> <status>` | Supported | Semantic | MVP accepts `open`, `in_progress`, and `closed`. |
 | `dep <id> <dep-id>` | Supported | Semantic | Adds a dependency once. |
-| `dep tree [--full] <id>` | Deferred | Human-readable output should be documented before parity claim | Planned under feature parity. |
-| `dep cycle` | Deferred | Human-readable output should be documented before parity claim | Planned under feature parity. |
+| `dep tree [--full] <id>` | Supported | Semantic with upstream-style readable tree output | Repeated dependencies are omitted by default and shown with `--full`; missing dependency targets are omitted from tree output. |
+| `dep cycle` | Supported | Semantic with stable readable output | Detects cycles among open/in-progress tickets and ignores cycles broken by closed tickets. |
 | `undep <id> <dep-id>` | Supported | Semantic | Removes a dependency. |
 | `link <id> <id> [id...]` | Partial | Semantic | MVP links two tickets; upstream supports multiple targets. |
 | `unlink <id> <target-id>` | Supported | Semantic | Removes symmetric link. |
 | `ls` / `list` | Supported | Semantic; stable shape for human output | MVP also includes closed tickets as an intentional convenience. |
 | `ready` | Supported | Semantic | Lists open/in-progress tickets with dependencies resolved. |
 | `blocked` | Supported | Semantic | Lists open/in-progress tickets with unresolved dependencies. |
-| `closed [--limit=N]` | Deferred | Semantic plus ordering policy | Upstream orders by mtime with default limit 20. |
+| `closed [--limit=N]` | Supported | Semantic plus mtime ordering policy | Lists closed tickets by descending file mtime with default limit 20 and supports `-a`/`-T` filters. |
 | `show <id>` | Supported | Byte-for-byte raw file output | Prints raw ticket Markdown content. |
 | `add-note <id> [text]` | Supported | Semantic; timestamp format documented by implementation | Accepts argument text or stdin. |
-| `super <cmd> [args]` | Security-gated | Semantic after plugin policy exists | Only useful once plugin dispatch exists. |
+| `super <cmd> [args]` | Supported | Semantic with reviewed plugin policy | Dispatches builtins only and never runs plugins. |
 
 ## Bundled Plugin Commands
 
 | Upstream command | Current status | Compatibility target | Notes |
 | --- | --- | --- | --- |
-| `edit <id>` | Security-gated | Semantic after editor launch policy exists | Requires editor command resolution and argument handling review. |
+| `edit <id>` | Supported | Semantic with reviewed editor launch policy | Uses a validated user-configured editor command, passes the ticket path as one argv element, and rejects inline shell-style editor arguments. |
 | plugin `ls` / `list` | Deferred | To be decided | Core `gtk list` already covers the MVP list workflow. |
-| `query [jq-filter]` | Deferred | JSON shape should be stable; filter strategy undecided | Options remain embedded jq-like evaluator, external `jq`, or documented unsupported filters. |
-| `migrate-beads` | Deferred | Good-enough import with explicit review report and rollback docs | Does not need perfect migration fidelity for the first parity pass. |
+| `query [jq-filter]` | Partial | Native JSONL output without filtering | `gtk query` emits one compact JSON object per ticket using ticket frontmatter fields and no path fields. jq-style filters are intentionally deferred and return a clear unsupported-filter error. This is not full query feature parity; filtered query support remains future parity work. |
+| `migrate-beads` | Supported | Good-enough import with explicit review report and conflict handling | Reads `.beads/issues.jsonl` under the project root, bounds input size, skips existing ticket IDs, reports malformed/partial records for review, and writes only through the ticket writer. |
 
 ## Plugin Surface
 
 Upstream discovers executables named `tk-<cmd>` or `ticket-<cmd>` on `PATH`.
-`go-ticket` will not implement plugin execution until there is a dedicated
-security review and a clearer use case for spending implementation effort on
-that surface.
+`go-ticket` implements a narrowed plugin dispatch policy for unknown commands.
+The policy favors explicit review over full upstream shell parity.
 
-Security policy must cover at least:
+Current plugin/editor execution policy:
 
-- PATH lookup order.
-- Allowed executable/script extensions by platform.
-- PowerShell script handling.
-- Environment variables passed to plugins.
-- Editor argument handling.
-- No implicit shell interpolation.
+- Builtins win by default; `super` dispatches builtins and never runs plugins.
+- Plugin command names must be simple command atoms with no path separators,
+  dots, drive letters, whitespace, or shell metacharacters.
+- Plugin lookup scans absolute PATH directories in order, ignoring empty,
+  relative, and current-directory entries.
+- Candidate order is `tk-<cmd>` before `ticket-<cmd>`.
+- Unix plugin candidates must be executable regular non-symlink files.
+- Windows plugin execution initially allows `.exe` only; `.cmd`, `.bat`, and
+  `.ps1` remain deferred future parity until wrapper behavior is reviewed and
+  tested.
+- Plugins receive only minimal ticket/project environment variables.
+- Process execution must use argv directly and never implicit shell
+  interpolation.
+- `edit` must use a validated editor command and pass the ticket path as one
+  argv element. Repository-controlled `.tickets` settings must not configure
+  editors.
+
+## Settings Surface
+
+`go-ticket` supports optional `.tickets/settings.json` with a prefix-only
+settings model. Unknown keys fail closed. Settings cannot configure plugins,
+editors, external roots, PATH behavior, or process execution policy.
 
 ## Release Readiness Notes
 

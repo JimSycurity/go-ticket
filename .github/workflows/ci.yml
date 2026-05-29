@@ -49,6 +49,10 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+      - name: Run vet
+        if: runner.os == 'Linux'
+        run: go vet ./...
+
       - name: Build CLI
         run: |
           suffix=""

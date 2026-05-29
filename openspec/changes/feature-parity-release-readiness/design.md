@@ -28,10 +28,11 @@ The MVP focuses on a native Go port of the highest-value ticket workflows. The f
   - Current decision: Plugin execution remains security-gated and should not be implemented until a full plugin security review is complete and concrete user value is clear.
   - Alternative considered: Drop plugins; rejected for parity, but plugin execution should receive explicit security review before implementation.
 
-- Support `query` through either embedded jq-compatible evaluation or a documented external `jq` fallback.
+- Support `query` with native JSONL output first and explicitly defer jq-style filtering.
   - Rationale: `query` is useful for agents and scripts, but native Windows should not require users to install Unix tooling for basic JSON output.
-  - Current decision: Filtering strategy remains open; establish JSON shape and compatibility tests before selecting embedded evaluation, external `jq`, or documented unsupported filters.
-  - Alternative considered: JSON-only query with no filter language; acceptable only if documented as a compatibility limitation.
+  - Current decision: `gtk query` emits compact JSONL for all tickets using ticket frontmatter fields. Filter arguments return a clear unsupported-filter error that names filtered query as future feature-parity work.
+  - Compatibility note: This is partial query parity, not full feature parity. Future filtered query support may use an embedded jq-compatible evaluator or a carefully documented external `jq` path.
+  - Alternative considered: Claiming query complete with JSON-only behavior; rejected because upstream `ticket-query` supports jq-style filters.
 
 - Add an optional lightweight settings file under `.tickets/` for configurable behavior.
   - Rationale: Prefixes and project-level behavior should be customizable without changing ticket files or requiring environment variables, while absent settings preserve upstream-compatible defaults.
@@ -47,10 +48,18 @@ The MVP focuses on a native Go port of the highest-value ticket workflows. The f
 ## Risks / Trade-offs
 
 - Plugin execution can run arbitrary PATH commands -> require explicit docs, tests, concrete use cases, and security review before enabling.
-- `query` compatibility may pull in a nontrivial dependency -> isolate evaluator logic behind a small interface.
+- Full filtered `query` compatibility may pull in a nontrivial dependency -> keep current JSONL output simple and isolate any future evaluator logic behind a small interface.
 - Beads migration input may be messy or untrusted -> parse defensively and never overwrite existing tickets without explicit behavior.
 - Release workflows can fail from platform-specific packaging assumptions -> build simple archives first, then add installers later if needed.
 - Compatibility can become vague -> maintain a visible command compatibility matrix in docs.
+
+## Security Review Baseline
+
+The proposed parity surface has a dedicated security review in `security.md`.
+Tasks that execute processes, launch editors, ingest Beads data, read optional
+`.tickets` settings, write ticket files, disclose local paths, or publish release
+artifacts SHALL reference and satisfy the relevant `security.md` gate before
+implementation is marked complete.
 
 ## Migration Plan
 
@@ -58,6 +67,6 @@ Users should be able to install `go-ticket`, run read-only parity checks against
 
 ## Open Questions
 
-- Should `query` embed a jq-compatible evaluator or require external `jq` only for filtered queries?
+- Which future filtered-query strategy should provide full parity: embedded jq-compatible evaluator, external `jq`, or a documented smaller filter language?
 - Should release artifacts include shell completions, package manager manifests, or just archives/checksums at first?
 - Should parity tests invoke the upstream Bash `ticket` script on POSIX as a differential oracle?

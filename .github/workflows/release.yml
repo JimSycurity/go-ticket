@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build Release Artifacts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build archives
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          tag="$REF_NAME"
+          version="${tag#v}"
+          commit="${GITHUB_SHA}"
+          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          ldflags="-X github.com/JimSycurity/go-ticket/internal/app.Version=${version} -X github.com/JimSycurity/go-ticket/internal/app.Commit=${commit} -X github.com/JimSycurity/go-ticket/internal/app.BuildDate=${build_date}"
+          mkdir -p dist build
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            name="go-ticket_${version}_${goos}_${goarch}"
+            binary="gtk"
+            if [ "$goos" = "windows" ]; then
+              binary="gtk.exe"
+            fi
+            rm -rf "build/${name}"
+            mkdir -p "build/${name}"
+            GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build -trimpath -ldflags "$ldflags" -o "build/${name}/${binary}" ./cmd/gtk
+            cp README.md LICENSE "build/${name}/"
+            if [ "$goos" = "windows" ]; then
+              (cd build && zip -q -r "../dist/${name}.zip" "$name")
+            else
+              tar -C build -czf "dist/${name}.tar.gz" "$name"
+            fi
+          done
+          (cd dist && sha256sum * > SHA256SUMS)
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          tag="$REF_NAME"
+          gh release create "$tag" dist/* --title "$tag" --generate-notes
