@@ -99,7 +99,7 @@ The system SHALL read and write Markdown ticket files using YAML frontmatter com
 
 #### Scenario: Contained ticket write target
 - **WHEN** the CLI creates or mutates a ticket file
-- **THEN** it SHALL resolve the ticket ID through a single containment-checked path resolver that rejects traversal, path separators, drive-letter syntax, Windows reserved device names, symlinked ticket files, non-regular existing targets, and paths outside the active `.tickets/` directory
+- **THEN** it SHALL resolve the ticket ID through a single containment-checked path resolver that accepts upstream-compatible dot-separated suffix IDs while rejecting traversal, empty dot segments, path separators, drive-letter syntax, Windows reserved device names, symlinked ticket files, non-regular existing targets, and paths outside the active `.tickets/` directory
 
 #### Scenario: Newline normalization
 - **WHEN** the CLI creates or mutates a ticket file
@@ -156,4 +156,3 @@ The system SHALL tolerate malformed ticket files during broad read operations an
 #### Scenario: Mutate malformed target
 - **WHEN** the user runs a mutation command targeting a malformed ticket file
 - **THEN** the CLI SHALL fail without modifying the file and report that the target could not be parsed safely
-

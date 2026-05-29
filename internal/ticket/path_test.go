@@ -20,18 +20,34 @@ func TestResolveTicketPathAcceptsValidID(t *testing.T) {
 	}
 }
 
+func TestResolveTicketPathAcceptsDottedUpstreamID(t *testing.T) {
+	root := Root{TicketsDir: t.TempDir()}
+
+	path, err := ResolveTicketPath(root, "GlobalTech-k78c.1", false)
+	if err != nil {
+		t.Fatalf("ResolveTicketPath returned error: %v", err)
+	}
+	want := filepath.Join(root.TicketsDir, "GlobalTech-k78c.1.md")
+	if path != want {
+		t.Fatalf("path = %q, want %q", path, want)
+	}
+}
+
 func TestResolveTicketPathRejectsUnsafeIDs(t *testing.T) {
 	root := Root{TicketsDir: t.TempDir()}
 	unsafeIDs := []string{
 		"",
 		".",
 		"..",
+		".gt-27pw",
+		"gt-27pw.",
+		"gt..27pw",
 		"../gt-27pw",
 		"nested/gt-27pw",
 		`nested\gt-27pw`,
 		"C:gt-27pw",
-		"gt.27pw",
 		"CON",
+		"CON.1",
 		"lpt1",
 	}
 

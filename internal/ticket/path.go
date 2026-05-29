@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-var ticketIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
+var ticketIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*(?:\.[A-Za-z0-9][A-Za-z0-9_-]*)*$`)
 
 var windowsReservedNames = map[string]struct{}{
 	"CON":  {},

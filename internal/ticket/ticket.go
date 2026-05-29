@@ -508,9 +508,10 @@ func AppendNote(t Ticket, text string, now time.Time) Ticket {
 
 func ValidateID(id string) error {
 	if !ticketIDPattern.MatchString(id) {
-		return fmt.Errorf("invalid ticket ID %q: use letters, numbers, underscore, or hyphen only", id)
+		return fmt.Errorf("invalid ticket ID %q: use letters, numbers, underscore, hyphen, or dot-separated suffixes only", id)
 	}
-	if _, reserved := windowsReservedNames[strings.ToUpper(id)]; reserved {
+	windowsBase, _, _ := strings.Cut(id, ".")
+	if _, reserved := windowsReservedNames[strings.ToUpper(windowsBase)]; reserved {
 		return fmt.Errorf("invalid ticket ID %q: reserved Windows device name", id)
 	}
 	return nil
