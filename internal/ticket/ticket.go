@@ -3,6 +3,7 @@ package ticket
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,7 +18,10 @@ import (
 const (
 	MaxTicketFileBytes = 1 << 20
 	MaxNoteBytes       = 64 << 10
+	MaxSettingsBytes   = 4 << 10
 )
+
+const SettingsFileName = "settings.json"
 
 type Ticket struct {
 	ID          string
@@ -46,6 +50,10 @@ type Field struct {
 type Warning struct {
 	Path string
 	Err  error
+}
+
+type Settings struct {
+	Prefix string `json:"prefix"`
 }
 
 func (w Warning) Error() string {
@@ -225,10 +233,10 @@ func Write(root Root, t Ticket) error {
 	if err != nil {
 		return err
 	}
-	if err := ValidateForWrite(t); err != nil {
+	content, err := RenderForWrite(t)
+	if err != nil {
 		return err
 	}
-	content := Render(t)
 	tmp, err := os.CreateTemp(root.TicketsDir, "."+t.ID+".*.tmp")
 	if err != nil {
 		return err
@@ -246,6 +254,25 @@ func Write(root Root, t Ticket) error {
 		return err
 	}
 	return nil
+}
+
+func PreflightWrite(root Root, t Ticket) error {
+	if _, err := ResolveTicketPath(root, t.ID, false); err != nil {
+		return err
+	}
+	_, err := RenderForWrite(t)
+	return err
+}
+
+func RenderForWrite(t Ticket) (string, error) {
+	if err := ValidateForWrite(t); err != nil {
+		return "", err
+	}
+	content := Render(t)
+	if len([]byte(content)) > MaxTicketFileBytes {
+		return "", fmt.Errorf("rendered ticket exceeds %d byte limit: %s", MaxTicketFileBytes, t.ID)
+	}
+	return content, nil
 }
 
 func ReadRawFile(path string) ([]byte, error) {
@@ -380,13 +407,20 @@ func NewTicket(root Root, title string) (Ticket, error) {
 
 func GenerateID(root Root) (string, error) {
 	prefix := projectPrefix(root.ProjectDir)
+	settings, err := LoadSettings(root)
+	if err != nil {
+		return "", err
+	}
+	if settings.Prefix != "" {
+		prefix = settings.Prefix
+	}
 	for i := 0; i < 100; i++ {
 		suffix, err := randomSuffix()
 		if err != nil {
 			return "", err
 		}
 		id := prefix + "-" + suffix
-		if _, err := ResolveTicketPath(root, id, true); os.IsNotExist(err) || strings.Contains(err.Error(), "no such file") {
+		if _, err := ResolveTicketPath(root, id, true); errors.Is(err, os.ErrNotExist) {
 			return id, nil
 		}
 		if _, err := Resolve(root, id); errors.Is(err, ErrMissingID) {
@@ -394,6 +428,49 @@ func GenerateID(root Root) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("could not generate non-colliding ticket ID")
+}
+
+func LoadSettings(root Root) (Settings, error) {
+	path := filepath.Join(root.TicketsDir, SettingsFileName)
+	info, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return Settings{}, nil
+		}
+		return Settings{}, fmt.Errorf("stat ticket settings: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return Settings{}, fmt.Errorf("ticket settings is not a regular file: %s", path)
+	}
+	if info.Size() > MaxSettingsBytes {
+		return Settings{}, fmt.Errorf("ticket settings exceeds %d byte limit: %s", MaxSettingsBytes, path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Settings{}, fmt.Errorf("read ticket settings: %w", err)
+	}
+	var settings Settings
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&settings); err != nil {
+		return Settings{}, fmt.Errorf("parse ticket settings: %w", err)
+	}
+	if settings.Prefix != "" {
+		if err := validatePrefix(settings.Prefix); err != nil {
+			return Settings{}, err
+		}
+	}
+	return settings, nil
+}
+
+func validatePrefix(prefix string) error {
+	if err := ValidateID(prefix); err != nil {
+		return fmt.Errorf("invalid settings prefix: %w", err)
+	}
+	if strings.Contains(prefix, "-") {
+		return fmt.Errorf("invalid settings prefix %q: use an ID atom without hyphen", prefix)
+	}
+	return nil
 }
 
 func AddUnique(values []string, value string) []string {

@@ -150,6 +150,34 @@ func TestWriteRejectsFrontmatterNewlineInjection(t *testing.T) {
 	}
 }
 
+func TestWriteRejectsRenderedTicketOverLimit(t *testing.T) {
+	root := Root{ProjectDir: t.TempDir()}
+	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)
+	mustMkdir(t, root.TicketsDir)
+	ticket := Ticket{
+		ID:       "gt-large",
+		Status:   "open",
+		Deps:     []string{},
+		Links:    []string{},
+		Created:  "2026-05-28T00:00:00Z",
+		Type:     "task",
+		Priority: "2",
+		Title:    "Large",
+		Body:     "# Large\n\n" + strings.Repeat("x", MaxTicketFileBytes),
+	}
+
+	err := Write(root, ticket)
+	if err == nil {
+		t.Fatal("Write succeeded for oversized rendered ticket")
+	}
+	if !strings.Contains(err.Error(), "rendered ticket exceeds") {
+		t.Fatalf("error = %q, want rendered ticket exceeds", err.Error())
+	}
+	if _, statErr := os.Stat(filepath.Join(root.TicketsDir, "gt-large.md")); !os.IsNotExist(statErr) {
+		t.Fatalf("ticket file exists after rejected write: %v", statErr)
+	}
+}
+
 func TestResolveRejectsTargetedSymlinkBeforeRead(t *testing.T) {
 	root := Root{ProjectDir: t.TempDir()}
 	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)
@@ -186,5 +214,62 @@ func TestReadRawFileRejectsOversizedTicket(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "exceeds") {
 		t.Fatalf("error = %q, want exceeds message", err.Error())
+	}
+}
+
+func TestGenerateIDUsesPrefixFromSettings(t *testing.T) {
+	root := Root{ProjectDir: t.TempDir()}
+	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)
+	mustMkdir(t, root.TicketsDir)
+	if err := os.WriteFile(filepath.Join(root.TicketsDir, SettingsFileName), []byte(`{"prefix":"gt"}`), 0o644); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+
+	id, err := GenerateID(root)
+	if err != nil {
+		t.Fatalf("GenerateID returned error: %v", err)
+	}
+	if !strings.HasPrefix(id, "gt-") {
+		t.Fatalf("id = %q, want gt prefix", id)
+	}
+}
+
+func TestSettingsRejectsUnsafeAndUnknownBehavior(t *testing.T) {
+	root := Root{ProjectDir: t.TempDir()}
+	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)
+	mustMkdir(t, root.TicketsDir)
+
+	if err := os.WriteFile(filepath.Join(root.TicketsDir, SettingsFileName), []byte(`{"prefix":"bad-prefix"}`), 0o644); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+	_, err := GenerateID(root)
+	if err == nil || !strings.Contains(err.Error(), "without hyphen") {
+		t.Fatalf("GenerateID error = %v, want invalid prefix", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(root.TicketsDir, SettingsFileName), []byte(`{"prefix":"gt","editor":"code"}`), 0o644); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+	_, err = GenerateID(root)
+	if err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("GenerateID error = %v, want unknown field", err)
+	}
+}
+
+func TestSettingsRejectsSymlink(t *testing.T) {
+	root := Root{ProjectDir: t.TempDir()}
+	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)
+	mustMkdir(t, root.TicketsDir)
+	target := filepath.Join(root.ProjectDir, "settings-target.json")
+	if err := os.WriteFile(target, []byte(`{"prefix":"gt"}`), 0o644); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	if err := os.Symlink(target, filepath.Join(root.TicketsDir, SettingsFileName)); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	_, err := GenerateID(root)
+	if err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("GenerateID error = %v, want non-regular settings", err)
 	}
 }

@@ -27,11 +27,15 @@ The system SHALL document installation and update paths for Windows, macOS, and 
 
 #### Scenario: Windows install
 - **WHEN** a Windows user reads the installation docs
-- **THEN** they SHALL find steps for installing `tk.exe` and adding it to PATH
+- **THEN** they SHALL find steps for installing `gtk.exe` and adding it to PATH
 
 #### Scenario: Unix install
 - **WHEN** a macOS or Linux user reads the installation docs
-- **THEN** they SHALL find steps for installing the `tk` binary and verifying it
+- **THEN** they SHALL find steps for installing the `gtk` binary and verifying it
+
+#### Scenario: Optional upstream replacement
+- **WHEN** a user wants `go-ticket` to replace upstream `tk`
+- **THEN** the docs SHALL explain that `gtk` is the side-by-side binary and any `tk` wrapper, copy, or symlink is an intentional local opt-in
 
 ### Requirement: Shell completions
 The system SHALL provide shell completion generation or installation guidance for supported shells after core parity is stable.

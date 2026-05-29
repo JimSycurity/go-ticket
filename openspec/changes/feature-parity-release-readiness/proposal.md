@@ -1,6 +1,6 @@
 ## Why
 
-After the MVP proves a native Go `tk` can operate on compatible `.tickets/` repositories, the project needs confidence that it can replace `wedow/ticket` for real workflows. That requires broader feature parity, compatibility tests, polished docs, and repeatable versioned releases.
+After the initial cross-platform port proved a native Go ticket CLI can operate on compatible `.tickets/` repositories, the project needs confidence that it can replace `wedow/ticket` for real workflows. The released binary remains `gtk` during the side-by-side adoption period so users can compare it with upstream `tk` before opting into replacement behavior. That requires broader feature parity, compatibility tests, polished docs, and repeatable versioned releases.
 
 ## What Changes
 
