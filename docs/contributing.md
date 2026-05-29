@@ -17,7 +17,8 @@ intentional behavior differences.
 
 - Ticket writes must go through `ticket.Write` or a reviewed helper with the
   same containment checks.
-- Ticket IDs must pass `ValidateID`.
+- Ticket IDs must pass `ValidateID`; upstream-compatible dotted suffixes such
+  as `project-abcd.1` are allowed only between normal ID atoms.
 - Target paths must pass `ResolveTicketPath`.
 - New bulk operations must report partial failures and avoid overwriting by
   default.

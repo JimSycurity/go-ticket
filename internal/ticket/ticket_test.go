@@ -61,6 +61,21 @@ func TestParseAcceptsCRLF(t *testing.T) {
 	}
 }
 
+func TestParseAcceptsDottedUpstreamID(t *testing.T) {
+	root := Root{ProjectDir: t.TempDir()}
+	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)
+	mustMkdir(t, root.TicketsDir)
+	content := "---\nid: GlobalTech-k78c.1\nstatus: in_progress\ndeps: []\nlinks: []\ncreated: 2026-05-28T00:00:00Z\ntype: task\npriority: 1\nparent: GlobalTech-k78c\n---\n# Define standalone GitHub boundary\n"
+
+	ticket, err := Parse(root, filepath.Join(root.TicketsDir, "GlobalTech-k78c.1.md"), content)
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	if ticket.ID != "GlobalTech-k78c.1" || ticket.Parent != "GlobalTech-k78c" {
+		t.Fatalf("parsed ticket = %#v", ticket)
+	}
+}
+
 func TestResolveIsCaseInsensitiveAndAmbiguous(t *testing.T) {
 	root := Root{ProjectDir: t.TempDir()}
 	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)
