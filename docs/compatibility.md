@@ -27,7 +27,7 @@ Status legend:
 
 | Upstream command | Current status | Compatibility target | Notes |
 | --- | --- | --- | --- |
-| `create [title] [options]` | Supported | Semantic plus compatible ticket file output | Supports description, design, acceptance, type, priority, assignee, external-ref, parent, and tags. |
+| `create [title] [options]` | Supported | Semantic plus compatible ticket file output | Supports description, design, acceptance, type, priority, assignee, external-ref, parent, and tags. Options are accepted before or after the title to match upstream examples and editor integrations. |
 | `start <id>` | Supported | Semantic | Sets status to `in_progress`. |
 | `close <id>` | Supported | Semantic | Sets status to `closed`. |
 | `reopen <id>` | Supported | Semantic | Sets status to `open`. |

@@ -203,6 +203,7 @@ func runCreate(args []string, stdout io.Writer, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	args = normalizeCreateArgs(args)
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	description := fs.String("description", "", "description text")
@@ -243,6 +244,56 @@ func runCreate(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 	fmt.Fprintln(stdout, t.ID)
 	return nil
+}
+
+func normalizeCreateArgs(args []string) []string {
+	knownOptions := map[string]bool{
+		"acceptance":   true,
+		"assignee":     true,
+		"description":  true,
+		"design":       true,
+		"external-ref": true,
+		"parent":       true,
+		"priority":     true,
+		"tags":         true,
+		"type":         true,
+	}
+	var options []string
+	var title []string
+	seenTitle := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			title = append(title, args[i+1:]...)
+			break
+		}
+		if name, ok := createOptionName(arg); ok && knownOptions[name] {
+			options = append(options, arg)
+			if !strings.Contains(arg, "=") && i+1 < len(args) {
+				i++
+				options = append(options, args[i])
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "--") && !seenTitle {
+			options = append(options, arg)
+			continue
+		}
+		seenTitle = true
+		title = append(title, arg)
+	}
+	return append(options, title...)
+}
+
+func createOptionName(arg string) (string, bool) {
+	if !strings.HasPrefix(arg, "--") || arg == "--" {
+		return "", false
+	}
+	name := strings.TrimPrefix(arg, "--")
+	if before, _, found := strings.Cut(name, "="); found {
+		name = before
+	}
+	return name, name != ""
 }
 
 func runShow(args []string, stdout io.Writer) error {

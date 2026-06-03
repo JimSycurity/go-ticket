@@ -386,6 +386,72 @@ func TestCreateListShowAndLifecycleWorkflow(t *testing.T) {
 	}
 }
 
+func TestCreateSupportsOptionsBeforeAndAfterTitle(t *testing.T) {
+	chdir(t, t.TempDir())
+
+	if _, stderr, code := run(nil, "init"); code != 0 {
+		t.Fatalf("init returned %d stderr=%q", code, stderr)
+	}
+
+	parentID := strings.TrimSpace(mustRun(t, "create", "Parent"))
+
+	beforeID := strings.TrimSpace(mustRun(
+		t,
+		"create",
+		"--type", "bug",
+		"--priority", "1",
+		"--assignee", "Jim",
+		"--external-ref", "gh-101",
+		"--parent", parentID,
+		"--tags", "before,metadata",
+		"--description", "Before description",
+		"Flags before title",
+	))
+	assertTicketFileContains(t, beforeID, []string{
+		"type: bug",
+		"priority: 1",
+		"assignee: Jim",
+		"external-ref: gh-101",
+		"parent: " + parentID,
+		"tags: [before, metadata]",
+		"# Flags before title",
+		"Before description",
+	}, nil)
+
+	afterID := strings.TrimSpace(mustRun(
+		t,
+		"create",
+		"Flags after title",
+		"--type=feature",
+		"--priority", "3",
+		"--assignee", "Jane",
+		"--external-ref=gh-102",
+		"--parent", parentID,
+		"--tags", "after,metadata",
+		"--description", "After description",
+		"--design", "After design",
+		"--acceptance", "After acceptance",
+	))
+	assertTicketFileContains(t, afterID, []string{
+		"type: feature",
+		"priority: 3",
+		"assignee: Jane",
+		"external-ref: gh-102",
+		"parent: " + parentID,
+		"tags: [after, metadata]",
+		"# Flags after title",
+		"After description",
+		"## Design",
+		"After design",
+		"## Acceptance Criteria",
+		"After acceptance",
+	}, []string{
+		"# Flags after title --type",
+		"--parent " + parentID,
+		"--external-ref=gh-102",
+	})
+}
+
 func TestRelationshipsReadyBlockedAndNotes(t *testing.T) {
 	chdir(t, t.TempDir())
 	mustRun(t, "init")
@@ -957,6 +1023,25 @@ func canonicalTestPath(t *testing.T, path string) string {
 		t.Fatalf("canonicalize %s: %v", path, err)
 	}
 	return resolved
+}
+
+func assertTicketFileContains(t *testing.T, id string, wants []string, rejects []string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(".tickets", id+".md"))
+	if err != nil {
+		t.Fatalf("read ticket %s: %v", id, err)
+	}
+	content := string(data)
+	for _, want := range wants {
+		if !strings.Contains(content, want) {
+			t.Fatalf("ticket %s missing %q in:\n%s", id, want, content)
+		}
+	}
+	for _, reject := range rejects {
+		if strings.Contains(content, reject) {
+			t.Fatalf("ticket %s unexpectedly contains %q in:\n%s", id, reject, content)
+		}
+	}
 }
 
 func run(stdin *strings.Reader, args ...string) (string, string, int) {
