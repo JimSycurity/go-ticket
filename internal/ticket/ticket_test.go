@@ -76,6 +76,36 @@ func TestParseAcceptsDottedUpstreamID(t *testing.T) {
 	}
 }
 
+func TestParseAcceptsYAMLBlockListsForKnownListFields(t *testing.T) {
+	root := Root{ProjectDir: t.TempDir()}
+	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)
+	mustMkdir(t, root.TicketsDir)
+	content := "---\nid: gt-block\nstatus: open\ndeps:\n  - gt-dep\nlinks:\n  - gt-link\ncreated: 2026-05-28T00:00:00Z\ntype: task\npriority: 2\ntags:\n  - cli\n  - parser\n---\n# Block lists\n"
+
+	ticket, err := Parse(root, filepath.Join(root.TicketsDir, "gt-block.md"), content)
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	if strings.Join(ticket.Deps, ",") != "gt-dep" {
+		t.Fatalf("Deps = %#v, want gt-dep", ticket.Deps)
+	}
+	if strings.Join(ticket.Links, ",") != "gt-link" {
+		t.Fatalf("Links = %#v, want gt-link", ticket.Links)
+	}
+	if strings.Join(ticket.Tags, ",") != "cli,parser" {
+		t.Fatalf("Tags = %#v, want cli,parser", ticket.Tags)
+	}
+	rendered, err := RenderForWrite(ticket)
+	if err != nil {
+		t.Fatalf("RenderForWrite returned error: %v", err)
+	}
+	for _, want := range []string{"deps: [gt-dep]", "links: [gt-link]", "tags: [cli, parser]"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered ticket missing %q:\n%s", want, rendered)
+		}
+	}
+}
+
 func TestResolveIsCaseInsensitiveAndAmbiguous(t *testing.T) {
 	root := Root{ProjectDir: t.TempDir()}
 	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)

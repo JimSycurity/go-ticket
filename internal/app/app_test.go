@@ -31,6 +31,55 @@ func TestHelpOnlyShowsMVPCommands(t *testing.T) {
 	}
 }
 
+func TestSubcommandHelpDoesNotRequireTicketDirectory(t *testing.T) {
+	chdir(t, t.TempDir())
+
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "init", args: []string{"init", "--help"}, want: "gtk init"},
+		{name: "create", args: []string{"create", "--help"}, want: "gtk create"},
+		{name: "show", args: []string{"show", "--help"}, want: "gtk show"},
+		{name: "edit", args: []string{"edit", "--help"}, want: "gtk edit"},
+		{name: "list", args: []string{"list", "--help"}, want: "gtk list"},
+		{name: "ls", args: []string{"ls", "--help"}, want: "gtk list"},
+		{name: "query", args: []string{"query", "--help"}, want: "gtk query"},
+		{name: "start", args: []string{"start", "--help"}, want: "gtk start"},
+		{name: "close", args: []string{"close", "--help"}, want: "gtk close"},
+		{name: "reopen", args: []string{"reopen", "--help"}, want: "gtk reopen"},
+		{name: "status", args: []string{"status", "--help"}, want: "gtk status"},
+		{name: "dep", args: []string{"dep", "--help"}, want: "gtk dep"},
+		{name: "dep tree", args: []string{"dep", "tree", "--help"}, want: "gtk dep tree"},
+		{name: "dep cycle", args: []string{"dep", "cycle", "--help"}, want: "gtk dep cycle"},
+		{name: "undep", args: []string{"undep", "--help"}, want: "gtk undep"},
+		{name: "link", args: []string{"link", "--help"}, want: "gtk link"},
+		{name: "unlink", args: []string{"unlink", "--help"}, want: "gtk unlink"},
+		{name: "ready", args: []string{"ready", "--help"}, want: "gtk ready"},
+		{name: "blocked", args: []string{"blocked", "--help"}, want: "gtk blocked"},
+		{name: "closed", args: []string{"closed", "--help"}, want: "gtk closed"},
+		{name: "add-note", args: []string{"add-note", "--help"}, want: "gtk add-note"},
+		{name: "migrate-beads", args: []string{"migrate-beads", "--help"}, want: "gtk migrate-beads"},
+		{name: "super", args: []string{"super", "--help"}, want: "gtk super"},
+		{name: "version", args: []string{"version", "--help"}, want: "gtk version"},
+		{name: "help add-note", args: []string{"help", "add-note"}, want: "gtk add-note"},
+		{name: "help dep tree", args: []string{"help", "dep", "tree"}, want: "gtk dep tree"},
+	}
+	for _, tc := range cases {
+		stdout, stderr, code := run(nil, tc.args...)
+		if code != 0 {
+			t.Fatalf("%s returned %d stderr=%q", tc.name, code, stderr)
+		}
+		if stderr != "" {
+			t.Fatalf("%s stderr = %q, want empty", tc.name, stderr)
+		}
+		if !strings.Contains(stdout, "Usage:") || !strings.Contains(stdout, tc.want) {
+			t.Fatalf("%s stdout = %q, want usage containing %q", tc.name, stdout, tc.want)
+		}
+	}
+}
+
 func TestVersionShowsBuildMetadata(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -450,6 +499,29 @@ func TestCreateSupportsOptionsBeforeAndAfterTitle(t *testing.T) {
 		"--parent " + parentID,
 		"--external-ref=gh-102",
 	})
+
+	postTitleTextID := strings.TrimSpace(mustRun(
+		t,
+		"create",
+		"Post-title metadata",
+		"--assignee", "Jim", "Sykora",
+		"--description", "Description", "with", "spaces",
+		"--design", "Design", "with", "spaces",
+		"--acceptance", "Acceptance", "with", "spaces",
+		"--type", "chore",
+	))
+	assertTicketFileContains(t, postTitleTextID, []string{
+		"type: chore",
+		"assignee: Jim Sykora",
+		"# Post-title metadata",
+		"Description with spaces",
+		"Design with spaces",
+		"Acceptance with spaces",
+	}, []string{
+		"# Post-title metadata --assignee",
+		"# Post-title metadata Jim Sykora",
+		"--description Description",
+	})
 }
 
 func TestRelationshipsReadyBlockedAndNotes(t *testing.T) {
@@ -491,6 +563,34 @@ func TestRelationshipsReadyBlockedAndNotes(t *testing.T) {
 	if !strings.Contains(string(data), "note from stdin") {
 		t.Fatalf("note not written:\n%s", string(data))
 	}
+}
+
+func TestDepAcceptsTicketWithYAMLBlockListTags(t *testing.T) {
+	chdir(t, t.TempDir())
+	mustRun(t, "init")
+	parent := strings.TrimSpace(mustRun(t, "create", "Parent"))
+	child := strings.TrimSpace(mustRun(t, "create", "--tags", "manual,yaml", "Child"))
+
+	path := filepath.Join(".tickets", child+".md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read child ticket: %v", err)
+	}
+	content := strings.Replace(string(data), "tags: [manual, yaml]", "tags:\n  - manual\n  - yaml", 1)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write child ticket: %v", err)
+	}
+
+	if _, stderr, code := run(nil, "dep", child, parent); code != 0 {
+		t.Fatalf("dep returned %d stderr=%q", code, stderr)
+	}
+	assertTicketFileContains(t, child, []string{
+		"deps: [" + parent + "]",
+		"tags: [manual, yaml]",
+	}, []string{
+		"  - manual",
+		"  - yaml",
+	})
 }
 
 func TestLinkPreflightsBothTicketsBeforeWriting(t *testing.T) {

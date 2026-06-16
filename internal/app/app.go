@@ -35,6 +35,8 @@ const helpText = `gtk - Go ticket CLI
 
 Usage:
   gtk <command> [args]
+  gtk help <command>
+  gtk <command> --help
 
 Commands:
   help                 Show this help text
@@ -61,6 +63,148 @@ Commands:
 
 Plugin execution is limited to reviewed PATH policy.
 `
+
+var commandHelpTexts = map[string]string{
+	"init": `Usage:
+  gtk init
+
+Initialize .tickets in the current directory.
+`,
+	"create": `Usage:
+  gtk create [options] <title>
+  gtk create <title> [options]
+
+Options:
+  --description <text>   Description body text
+  --design <text>        Design section text
+  --acceptance <text>    Acceptance criteria text
+  --type <type>          Ticket type: bug, feature, task, epic, chore
+  --priority <0-4>       Ticket priority
+  --assignee <name>      Assignee name
+  --external-ref <ref>   External reference
+  --parent <id>          Parent ticket ID
+  --tags <csv>           Comma-separated tags
+`,
+	"show": `Usage:
+  gtk show <id>
+
+Print a raw ticket Markdown file.
+`,
+	"edit": `Usage:
+  gtk edit <id>
+
+Open a ticket in the configured editor.
+`,
+	"list": `Usage:
+  gtk list [options]
+  gtk ls [options]
+
+Options:
+  --json                 Emit JSON summaries
+  --status <status>      Filter by status
+  --assignee <name>      Filter by assignee
+  --type <type>          Filter by type
+`,
+	"query": `Usage:
+  gtk query
+
+Emit ticket frontmatter as JSONL.
+`,
+	"start": `Usage:
+  gtk start <id>
+
+Set a ticket to in_progress.
+`,
+	"close": `Usage:
+  gtk close <id>
+
+Set a ticket to closed.
+`,
+	"reopen": `Usage:
+  gtk reopen <id>
+
+Set a ticket to open.
+`,
+	"status": `Usage:
+  gtk status <id> <status>
+
+Set a ticket status to open, in_progress, or closed.
+`,
+	"dep": `Usage:
+  gtk dep <id> <dep-id>
+  gtk dep tree [--full] <id>
+  gtk dep cycle
+
+Add dependencies, print dependency trees, or detect dependency cycles.
+`,
+	"dep tree": `Usage:
+  gtk dep tree [--full] <id>
+
+Options:
+  --full                 Show repeated dependencies
+`,
+	"dep cycle": `Usage:
+  gtk dep cycle
+
+Detect dependency cycles among open and in_progress tickets.
+`,
+	"undep": `Usage:
+  gtk undep <id> <dep-id>
+
+Remove a dependency.
+`,
+	"link": `Usage:
+  gtk link <id> <id>
+
+Add a symmetric ticket link.
+`,
+	"unlink": `Usage:
+  gtk unlink <id> <id>
+
+Remove a symmetric ticket link.
+`,
+	"ready": `Usage:
+  gtk ready
+
+List open or in_progress tickets whose dependencies are resolved.
+`,
+	"blocked": `Usage:
+  gtk blocked
+
+List open or in_progress tickets with unresolved dependencies.
+`,
+	"closed": `Usage:
+  gtk closed [options]
+
+Options:
+  --limit <n>            Maximum closed tickets to show
+  -a <name>              Filter by assignee
+  -T <type>              Filter by type
+`,
+	"add-note": `Usage:
+  gtk add-note <id> [text]
+
+Append a timestamped note. If text is omitted, stdin is used.
+`,
+	"migrate-beads": `Usage:
+  gtk migrate-beads [options]
+
+Options:
+  --dry-run              Report import actions without writing tickets
+  --source <path>        Beads JSONL export path under project root
+`,
+	"super": `Usage:
+  gtk super <builtin-command> [args]
+
+Run a builtin command without plugin dispatch.
+`,
+	"version": `Usage:
+  gtk version
+  gtk --version
+
+Show build and VCS metadata.
+`,
+}
 
 type JSONTicket struct {
 	ID          string   `json:"id"`
@@ -111,8 +255,25 @@ func runCommand(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writ
 
 	command := strings.TrimSpace(args[0])
 	var err error
+	if command == "help" {
+		if len(args) == 1 {
+			fmt.Fprint(stdout, helpText)
+			return 0
+		}
+		text, ok := helpForTopic(args[1:])
+		if !ok {
+			fmt.Fprintf(stderr, "unsupported help topic: %s\n", strings.Join(args[1:], " "))
+			return 1
+		}
+		fmt.Fprint(stdout, text)
+		return 0
+	}
+	if text, ok := helpForCommandArgs(command, args[1:]); ok {
+		fmt.Fprint(stdout, text)
+		return 0
+	}
 	switch command {
-	case "help", "-h", "--help":
+	case "-h", "--help":
 		fmt.Fprint(stdout, helpText)
 		return 0
 	case "version", "--version":
@@ -258,6 +419,12 @@ func normalizeCreateArgs(args []string) []string {
 		"tags":         true,
 		"type":         true,
 	}
+	textOptions := map[string]bool{
+		"acceptance":  true,
+		"assignee":    true,
+		"description": true,
+		"design":      true,
+	}
 	var options []string
 	var title []string
 	seenTitle := false
@@ -270,12 +437,26 @@ func normalizeCreateArgs(args []string) []string {
 		if name, ok := createOptionName(arg); ok && knownOptions[name] {
 			options = append(options, arg)
 			if !strings.Contains(arg, "=") && i+1 < len(args) {
-				i++
-				options = append(options, args[i])
+				if seenTitle && textOptions[name] {
+					var value []string
+					for i+1 < len(args) {
+						if strings.HasPrefix(args[i+1], "--") {
+							break
+						}
+						i++
+						value = append(value, args[i])
+					}
+					if len(value) > 0 {
+						options = append(options, strings.Join(value, " "))
+					}
+				} else {
+					i++
+					options = append(options, args[i])
+				}
 			}
 			continue
 		}
-		if strings.HasPrefix(arg, "--") && !seenTitle {
+		if strings.HasPrefix(arg, "--") {
 			options = append(options, arg)
 			continue
 		}
@@ -294,6 +475,38 @@ func createOptionName(arg string) (string, bool) {
 		name = before
 	}
 	return name, name != ""
+}
+
+func helpForCommandArgs(command string, args []string) (string, bool) {
+	if command == "dep" && len(args) == 2 && isHelpToken(args[1]) {
+		return commandHelp("dep " + args[0])
+	}
+	if len(args) == 1 && isHelpToken(args[0]) {
+		return commandHelp(command)
+	}
+	return "", false
+}
+
+func helpForTopic(topic []string) (string, bool) {
+	if len(topic) == 1 {
+		return commandHelp(topic[0])
+	}
+	if len(topic) == 2 && topic[0] == "dep" {
+		return commandHelp("dep " + topic[1])
+	}
+	return "", false
+}
+
+func commandHelp(command string) (string, bool) {
+	if command == "ls" {
+		command = "list"
+	}
+	text, ok := commandHelpTexts[command]
+	return text, ok
+}
+
+func isHelpToken(value string) bool {
+	return value == "help" || value == "-h" || value == "--help"
 }
 
 func runShow(args []string, stdout io.Writer) error {

@@ -100,8 +100,9 @@ func Parse(root Root, path string, content string) (Ticket, error) {
 	}
 
 	var err error
-	for _, line := range strings.Split(parts[0], "\n") {
-		line = strings.TrimSpace(line)
+	lines := strings.Split(parts[0], "\n")
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
 		if line == "" {
 			continue
 		}
@@ -117,12 +118,12 @@ func Parse(root Root, path string, content string) (Ticket, error) {
 		case "status":
 			t.Status = value
 		case "deps":
-			t.Deps, err = parseList(value)
+			t.Deps, i, err = parseFrontmatterList(value, lines, i)
 			if err != nil {
 				return Ticket{}, fmt.Errorf("parse deps: %w", err)
 			}
 		case "links":
-			t.Links, err = parseList(value)
+			t.Links, i, err = parseFrontmatterList(value, lines, i)
 			if err != nil {
 				return Ticket{}, fmt.Errorf("parse links: %w", err)
 			}
@@ -139,7 +140,7 @@ func Parse(root Root, path string, content string) (Ticket, error) {
 		case "parent":
 			t.Parent = value
 		case "tags":
-			t.Tags, err = parseList(value)
+			t.Tags, i, err = parseFrontmatterList(value, lines, i)
 			if err != nil {
 				return Ticket{}, fmt.Errorf("parse tags: %w", err)
 			}
@@ -557,6 +558,41 @@ func parseList(value string) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+func parseFrontmatterList(value string, lines []string, index int) ([]string, int, error) {
+	if strings.TrimSpace(value) != "" {
+		values, err := parseList(value)
+		return values, index, err
+	}
+	values, next, err := parseBlockList(lines, index+1)
+	if err != nil {
+		return nil, index, err
+	}
+	if next == index+1 {
+		return []string{}, index, nil
+	}
+	return values, next - 1, nil
+}
+
+func parseBlockList(lines []string, start int) ([]string, int, error) {
+	var out []string
+	i := start
+	for ; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		if line != "-" && !strings.HasPrefix(line, "- ") {
+			break
+		}
+		item := strings.TrimSpace(strings.TrimPrefix(line, "-"))
+		if item == "" {
+			return nil, i, fmt.Errorf("empty block list item")
+		}
+		out = append(out, strings.Trim(item, `"'`))
+	}
+	return out, i, nil
 }
 
 func titleFromBody(body string) string {
