@@ -100,8 +100,9 @@ func Parse(root Root, path string, content string) (Ticket, error) {
 	}
 
 	var err error
-	for _, line := range strings.Split(parts[0], "\n") {
-		line = strings.TrimSpace(line)
+	lines := strings.Split(parts[0], "\n")
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
 		if line == "" {
 			continue
 		}
@@ -117,12 +118,12 @@ func Parse(root Root, path string, content string) (Ticket, error) {
 		case "status":
 			t.Status = value
 		case "deps":
-			t.Deps, err = parseList(value)
+			t.Deps, i, err = parseFrontmatterList(value, lines, i)
 			if err != nil {
 				return Ticket{}, fmt.Errorf("parse deps: %w", err)
 			}
 		case "links":
-			t.Links, err = parseList(value)
+			t.Links, i, err = parseFrontmatterList(value, lines, i)
 			if err != nil {
 				return Ticket{}, fmt.Errorf("parse links: %w", err)
 			}
@@ -139,7 +140,7 @@ func Parse(root Root, path string, content string) (Ticket, error) {
 		case "parent":
 			t.Parent = value
 		case "tags":
-			t.Tags, err = parseList(value)
+			t.Tags, i, err = parseFrontmatterList(value, lines, i)
 			if err != nil {
 				return Ticket{}, fmt.Errorf("parse tags: %w", err)
 			}
@@ -222,7 +223,7 @@ func Resolve(root Root, ref string) (Ticket, error) {
 	if len(matches) > 1 {
 		return Ticket{}, fmt.Errorf("%w: %s matches %s", ErrAmbiguousID, ref, strings.Join(matchIDs(matches), ", "))
 	}
-	if _, err := checkedRegularFile(matches[0]); err != nil {
+	if _, err := checkedRegularFile(matches[0], "ticket file"); err != nil {
 		return Ticket{}, err
 	}
 	return ParseFile(root, matches[0])
@@ -276,26 +277,7 @@ func RenderForWrite(t Ticket) (string, error) {
 }
 
 func ReadRawFile(path string) ([]byte, error) {
-	info, err := checkedRegularFile(path)
-	if err != nil {
-		return nil, err
-	}
-	if info.Size() > MaxTicketFileBytes {
-		return nil, fmt.Errorf("ticket file exceeds %d byte limit: %s", MaxTicketFileBytes, path)
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, MaxTicketFileBytes+1))
-	if err != nil {
-		return nil, err
-	}
-	if len(data) > MaxTicketFileBytes {
-		return nil, fmt.Errorf("ticket file exceeds %d byte limit: %s", MaxTicketFileBytes, path)
-	}
-	return data, nil
+	return readRegularFile(path, MaxTicketFileBytes, "ticket file")
 }
 
 func ValidateForWrite(t Ticket) error {
@@ -432,21 +414,11 @@ func GenerateID(root Root) (string, error) {
 
 func LoadSettings(root Root) (Settings, error) {
 	path := filepath.Join(root.TicketsDir, SettingsFileName)
-	info, err := os.Lstat(path)
+	data, err := readRegularFile(path, MaxSettingsBytes, "ticket settings")
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Settings{}, nil
 		}
-		return Settings{}, fmt.Errorf("stat ticket settings: %w", err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-		return Settings{}, fmt.Errorf("ticket settings is not a regular file: %s", path)
-	}
-	if info.Size() > MaxSettingsBytes {
-		return Settings{}, fmt.Errorf("ticket settings exceeds %d byte limit: %s", MaxSettingsBytes, path)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
 		return Settings{}, fmt.Errorf("read ticket settings: %w", err)
 	}
 	var settings Settings
@@ -559,6 +531,41 @@ func parseList(value string) ([]string, error) {
 	return out, nil
 }
 
+func parseFrontmatterList(value string, lines []string, index int) ([]string, int, error) {
+	if strings.TrimSpace(value) != "" {
+		values, err := parseList(value)
+		return values, index, err
+	}
+	values, next, err := parseBlockList(lines, index+1)
+	if err != nil {
+		return nil, index, err
+	}
+	if next == index+1 {
+		return []string{}, index, nil
+	}
+	return values, next - 1, nil
+}
+
+func parseBlockList(lines []string, start int) ([]string, int, error) {
+	var out []string
+	i := start
+	for ; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		if line != "-" && !strings.HasPrefix(line, "- ") {
+			break
+		}
+		item := strings.TrimSpace(strings.TrimPrefix(line, "-"))
+		if item == "" {
+			return nil, i, fmt.Errorf("empty block list item")
+		}
+		out = append(out, strings.Trim(item, `"'`))
+	}
+	return out, i, nil
+}
+
 func titleFromBody(body string) string {
 	for _, line := range strings.Split(body, "\n") {
 		line = strings.TrimSpace(line)
@@ -645,16 +652,77 @@ func matchIDs(paths []string) []string {
 	return out
 }
 
-func checkedRegularFile(path string) (os.FileInfo, error) {
+// OpenRegularFile opens path only after validating that it is a regular,
+// non-symlink file and that the opened handle still matches the path that was
+// checked. Go's os.SameFile uses platform file identity on Unix and Windows.
+// This closes the common Lstat-then-open symlink swap window, but it cannot
+// freeze contents that another process mutates after the handle is open.
+func OpenRegularFile(path string, maxBytes int64) (*os.File, error) {
+	return openRegularFile(path, maxBytes, "file")
+}
+
+func readRegularFile(path string, maxBytes int64, label string) ([]byte, error) {
+	file, err := openRegularFile(path, maxBytes, label)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("%s exceeds %d byte limit: %s", label, maxBytes, path)
+	}
+	return data, nil
+}
+
+func openRegularFile(path string, maxBytes int64, label string) (*os.File, error) {
+	return openRegularFileWithOpener(path, maxBytes, label, os.Open)
+}
+
+func openRegularFileWithOpener(path string, maxBytes int64, label string, opener func(string) (*os.File, error)) (*os.File, error) {
+	before, err := checkedRegularFile(path, label)
+	if err != nil {
+		return nil, err
+	}
+	if maxBytes >= 0 && before.Size() > maxBytes {
+		return nil, fmt.Errorf("%s exceeds %d byte limit: %s", label, maxBytes, path)
+	}
+	file, err := opener(path)
+	if err != nil {
+		return nil, err
+	}
+	after, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return nil, fmt.Errorf("stat opened %s: %w", label, err)
+	}
+	if !after.Mode().IsRegular() {
+		file.Close()
+		return nil, fmt.Errorf("%s is not a regular file: %s", label, path)
+	}
+	if !os.SameFile(before, after) {
+		file.Close()
+		return nil, fmt.Errorf("%s changed while opening: %s", label, path)
+	}
+	if maxBytes >= 0 && after.Size() > maxBytes {
+		file.Close()
+		return nil, fmt.Errorf("%s exceeds %d byte limit: %s", label, maxBytes, path)
+	}
+	return file, nil
+}
+
+func checkedRegularFile(path string, label string) (os.FileInfo, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return nil, err
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
-		return nil, fmt.Errorf("ticket file is a symlink: %s", path)
+		return nil, fmt.Errorf("%s is a symlink: %s", label, path)
 	}
 	if !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("ticket path is not a regular file: %s", path)
+		return nil, fmt.Errorf("%s is not a regular file: %s", label, path)
 	}
 	return info, nil
 }

@@ -76,6 +76,36 @@ func TestParseAcceptsDottedUpstreamID(t *testing.T) {
 	}
 }
 
+func TestParseAcceptsYAMLBlockListsForKnownListFields(t *testing.T) {
+	root := Root{ProjectDir: t.TempDir()}
+	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)
+	mustMkdir(t, root.TicketsDir)
+	content := "---\nid: gt-block\nstatus: open\ndeps:\n  - gt-dep\nlinks:\n  - gt-link\ncreated: 2026-05-28T00:00:00Z\ntype: task\npriority: 2\ntags:\n  - cli\n  - parser\n---\n# Block lists\n"
+
+	ticket, err := Parse(root, filepath.Join(root.TicketsDir, "gt-block.md"), content)
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	if strings.Join(ticket.Deps, ",") != "gt-dep" {
+		t.Fatalf("Deps = %#v, want gt-dep", ticket.Deps)
+	}
+	if strings.Join(ticket.Links, ",") != "gt-link" {
+		t.Fatalf("Links = %#v, want gt-link", ticket.Links)
+	}
+	if strings.Join(ticket.Tags, ",") != "cli,parser" {
+		t.Fatalf("Tags = %#v, want cli,parser", ticket.Tags)
+	}
+	rendered, err := RenderForWrite(ticket)
+	if err != nil {
+		t.Fatalf("RenderForWrite returned error: %v", err)
+	}
+	for _, want := range []string{"deps: [gt-dep]", "links: [gt-link]", "tags: [cli, parser]"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered ticket missing %q:\n%s", want, rendered)
+		}
+	}
+}
+
 func TestResolveIsCaseInsensitiveAndAmbiguous(t *testing.T) {
 	root := Root{ProjectDir: t.TempDir()}
 	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)
@@ -215,6 +245,34 @@ func TestResolveRejectsTargetedSymlinkBeforeRead(t *testing.T) {
 	}
 }
 
+func TestOpenRegularFileDetectsSymlinkSwapDuringOpen(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "gt-race.md")
+	target := filepath.Join(root, "target.md")
+	if err := os.WriteFile(path, []byte("---\nid: gt-race\n---\n# Race\n"), 0o644); err != nil {
+		t.Fatalf("write initial ticket: %v", err)
+	}
+	if err := os.WriteFile(target, []byte("---\nid: target\n---\n# Target\n"), 0o644); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+
+	_, err := openRegularFileWithOpener(path, MaxTicketFileBytes, "ticket file", func(openPath string) (*os.File, error) {
+		if err := os.Remove(openPath); err != nil {
+			t.Fatalf("remove original path: %v", err)
+		}
+		if err := os.Symlink(target, openPath); err != nil {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+		return os.Open(openPath)
+	})
+	if err == nil {
+		t.Fatal("openRegularFileWithOpener succeeded after symlink swap")
+	}
+	if !strings.Contains(err.Error(), "changed while opening") {
+		t.Fatalf("error = %q, want changed while opening", err.Error())
+	}
+}
+
 func TestReadRawFileRejectsOversizedTicket(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "gt-large.md")
@@ -284,7 +342,7 @@ func TestSettingsRejectsSymlink(t *testing.T) {
 	}
 
 	_, err := GenerateID(root)
-	if err == nil || !strings.Contains(err.Error(), "not a regular file") {
-		t.Fatalf("GenerateID error = %v, want non-regular settings", err)
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("GenerateID error = %v, want symlink settings", err)
 	}
 }

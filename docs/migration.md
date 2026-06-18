@@ -22,6 +22,8 @@ or restore the copied `.tickets` directory.
 It treats Beads data as untrusted local input:
 
 - the source must be a regular, non-symlink file under the project root;
+- the opened source handle is revalidated against the checked path to catch
+  local symlink swaps before reading;
 - the source and each JSONL line are size-bounded;
 - malformed, partial, or unsafe records are reported for review;
 - existing ticket IDs are skipped instead of overwritten;
