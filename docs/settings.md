@@ -17,6 +17,8 @@ Security boundaries:
 
 - settings must be a regular, non-symlink file under the active `.tickets`
   directory;
+- the opened settings handle is revalidated against the checked path to catch
+  local symlink swaps before reading;
 - the file is limited to 4 KiB;
 - unknown keys fail closed;
 - `prefix` must be a simple ticket ID atom without hyphens;

@@ -386,6 +386,31 @@ func TestMigrateBeadsRejectsSourceSymlinkIndirection(t *testing.T) {
 	}
 }
 
+func TestMigrateBeadsRejectsSourceSymlink(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	mustRun(t, "init")
+	beadsDir := filepath.Join(dir, ".beads")
+	if err := os.Mkdir(beadsDir, 0o755); err != nil {
+		t.Fatalf("mkdir beads dir: %v", err)
+	}
+	target := filepath.Join(dir, "issues-target.jsonl")
+	if err := os.WriteFile(target, []byte(`{"id":"bd-one","title":"One"}`+"\n"), 0o644); err != nil {
+		t.Fatalf("write target source: %v", err)
+	}
+	if err := os.Symlink(target, filepath.Join(beadsDir, "issues.jsonl")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	_, stderr, code := run(nil, "migrate-beads")
+	if code == 0 {
+		t.Fatal("migrate-beads accepted symlinked source")
+	}
+	if !strings.Contains(stderr, "not a regular file") {
+		t.Fatalf("stderr = %q, want non-regular source error", stderr)
+	}
+}
+
 func TestCreateListShowAndLifecycleWorkflow(t *testing.T) {
 	chdir(t, t.TempDir())
 

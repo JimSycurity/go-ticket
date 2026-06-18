@@ -1209,9 +1209,9 @@ func resolveMigrationSource(root ticket.Root, source string) (string, error) {
 }
 
 func migrateBeads(root ticket.Root, sourcePath string, dryRun bool, stdout io.Writer) (migrationReport, error) {
-	file, err := os.Open(sourcePath)
+	file, err := ticket.OpenRegularFile(sourcePath, maxBeadsImportBytes)
 	if err != nil {
-		return migrationReport{}, err
+		return migrationReport{}, fmt.Errorf("open migration source: %w", err)
 	}
 	defer file.Close()
 
