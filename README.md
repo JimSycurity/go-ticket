@@ -10,6 +10,8 @@ grep, or ripgrep for the supported command set.
 The primary binary is currently named `gtk` so it can be tested side-by-side
 with upstream `tk`.
 
+go-ticket is designed to work with [vscode-tk](https://github.com/JimSycurity/vscode-tk) and vice-versa.
+
 If you are ready to use `go-ticket` as your default ticket CLI, you can install
 `gtk` on PATH and update your tools to call `gtk`, or create your own `tk`
 wrapper/symlink after you intentionally decide to replace upstream `tk`.
