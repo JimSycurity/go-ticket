@@ -83,6 +83,7 @@ Options:
   --assignee <name>      Assignee name
   --external-ref <ref>   External reference
   --parent <id>          Parent ticket ID
+  --folder <path>        Existing child folder under .tickets
   --tags <csv>           Comma-separated tags
 `,
 	"show": `Usage:
@@ -376,6 +377,7 @@ func runCreate(args []string, stdout io.Writer, stderr io.Writer) error {
 	externalRef := fs.String("external-ref", "", "external reference")
 	parent := fs.String("parent", "", "parent ticket ID")
 	tags := fs.String("tags", "", "comma-separated tags")
+	folder := fs.String("folder", "", "existing child folder under .tickets")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -400,11 +402,18 @@ func runCreate(args []string, stdout io.Writer, stderr io.Writer) error {
 	t.Parent = *parent
 	t.Tags = splitCSV(*tags)
 	t.Body = buildBody(title, *description, *design, *acceptance)
-	if err := ticket.Write(root, t); err != nil {
+	if err := writeCreatedTicket(root, t, *folder); err != nil {
 		return err
 	}
 	fmt.Fprintln(stdout, t.ID)
 	return nil
+}
+
+func writeCreatedTicket(root ticket.Root, t ticket.Ticket, folder string) error {
+	if folder != "" {
+		return ticket.WriteNewInSubdir(root, t, folder)
+	}
+	return ticket.Write(root, t)
 }
 
 func normalizeCreateArgs(args []string) []string {
@@ -414,6 +423,7 @@ func normalizeCreateArgs(args []string) []string {
 		"description":  true,
 		"design":       true,
 		"external-ref": true,
+		"folder":       true,
 		"parent":       true,
 		"priority":     true,
 		"tags":         true,

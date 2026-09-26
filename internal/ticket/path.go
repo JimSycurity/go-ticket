@@ -55,7 +55,23 @@ func ResolveTicketPath(root Root, id string, mustExist bool) (string, error) {
 		return "", fmt.Errorf("tickets directory is not a directory: %s", ticketsDir)
 	}
 
+	paths, warnings := ticketPaths(root)
+	if len(warnings) > 0 {
+		return "", warnings[0]
+	}
+	var matches []string
+	for _, candidate := range paths {
+		if strings.EqualFold(filepath.Base(candidate), id+".md") {
+			matches = append(matches, candidate)
+		}
+	}
+	if len(matches) > 1 {
+		return "", fmt.Errorf("%w: %s matches %s", ErrAmbiguousID, id, strings.Join(matchIDs(matches), ", "))
+	}
 	path := filepath.Join(ticketsDir, id+".md")
+	if len(matches) == 1 {
+		path = matches[0]
+	}
 	resolved, err := filepath.Abs(path)
 	if err != nil {
 		return "", fmt.Errorf("resolve ticket path: %w", err)

@@ -46,6 +46,104 @@ func TestListSkipsMalformedWithWarning(t *testing.T) {
 	}
 }
 
+func TestNestedTicketsListResolveAndWriteInPlace(t *testing.T) {
+	root := Root{ProjectDir: t.TempDir()}
+	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)
+	nested := filepath.Join(root.TicketsDir, "okta", "research")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	flat := Ticket{ID: "oh-flat", Status: "open", Body: "# Flat\n"}
+	if err := Write(root, flat); err != nil {
+		t.Fatal(err)
+	}
+	nestedPath := filepath.Join(nested, "oh-nested.md")
+	if err := os.WriteFile(nestedPath, []byte(Render(Ticket{ID: "oh-nested", Status: "open", Body: "# Nested\n"})), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tickets, warnings := List(root)
+	if len(tickets) != 2 || len(warnings) != 0 {
+		t.Fatalf("tickets = %#v, warnings = %#v", tickets, warnings)
+	}
+	found, err := Resolve(root, "oh-nest")
+	if err != nil || found.Path != nestedPath {
+		t.Fatalf("Resolve = %#v, %v", found, err)
+	}
+	found.Status = "closed"
+	if err := Write(root, found); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root.TicketsDir, "oh-nested.md")); !os.IsNotExist(err) {
+		t.Fatalf("nested ticket was written at root: %v", err)
+	}
+	updated, err := Resolve(root, "oh-nested")
+	if err != nil || updated.Status != "closed" || updated.Path != nestedPath {
+		t.Fatalf("updated = %#v, %v", updated, err)
+	}
+}
+
+func TestNestedDuplicateIDsAreAmbiguous(t *testing.T) {
+	root := Root{ProjectDir: t.TempDir()}
+	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)
+	if err := os.MkdirAll(filepath.Join(root.TicketsDir, "okta"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root.TicketsDir, "github"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := []byte(Render(Ticket{ID: "oh-same", Body: "# Same\n"}))
+	for _, directory := range []string{"okta", "github"} {
+		if err := os.WriteFile(filepath.Join(root.TicketsDir, directory, "oh-same.md"), content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := Resolve(root, "oh-same"); !errors.Is(err, ErrAmbiguousID) {
+		t.Fatalf("Resolve error = %v, want ambiguous ID", err)
+	}
+	if err := Write(root, Ticket{ID: "oh-same", Body: "# Same\n"}); !errors.Is(err, ErrAmbiguousID) {
+		t.Fatalf("Write error = %v, want ambiguous ID", err)
+	}
+	tickets, warnings := List(root)
+	if len(tickets) != 0 || len(warnings) != 2 {
+		t.Fatalf("tickets = %#v, warnings = %#v", tickets, warnings)
+	}
+}
+
+func TestWriteNewInSubdir(t *testing.T) {
+	root := Root{ProjectDir: t.TempDir()}
+	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)
+	nested := filepath.Join(root.TicketsDir, "okta", "research")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteNewInSubdir(root, Ticket{ID: "oh-new", Body: "# New\n"}, "okta/research"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(nested, "oh-new.md")); err != nil {
+		t.Fatal(err)
+	}
+	spaced := filepath.Join(root.TicketsDir, "Research and Planning")
+	if err := os.Mkdir(spaced, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteNewInSubdir(root, Ticket{ID: "oh-spaced", Body: "# Spaced\n"}, "Research and Planning"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(spaced, "oh-spaced.md")); err != nil {
+		t.Fatal(err)
+	}
+	for _, folder := range []string{"../outside", "/tmp", "okta/../research", "okta\\research", "CON", "foo?bar"} {
+		if err := WriteNewInSubdir(root, Ticket{ID: "oh-other", Body: "# Other\n"}, folder); err == nil {
+			t.Fatalf("folder %q was accepted", folder)
+		}
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(root.TicketsDir, "linked")); err == nil {
+		if err := WriteNewInSubdir(root, Ticket{ID: "oh-other", Body: "# Other\n"}, "linked"); err == nil {
+			t.Fatal("symlinked child folder was accepted")
+		}
+	}
+}
+
 func TestParseAcceptsCRLF(t *testing.T) {
 	root := Root{ProjectDir: t.TempDir()}
 	root.TicketsDir = filepath.Join(root.ProjectDir, TicketsDirName)
