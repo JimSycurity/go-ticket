@@ -1,6 +1,7 @@
 package ticket
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -93,5 +94,22 @@ func TestResolveTicketPathRejectsExistingSymlink(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "symlink") {
 		t.Fatalf("error = %q, want symlink message", err.Error())
+	}
+}
+
+func TestNestedSymlinkDirectoryIsNotTraversed(t *testing.T) {
+	root := Root{TicketsDir: t.TempDir()}
+	external := t.TempDir()
+	if err := os.WriteFile(filepath.Join(external, "gt-escape.md"), []byte("---\nid: gt-escape\n---\n# Escape\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, filepath.Join(root.TicketsDir, "linked")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if _, err := Resolve(root, "gt-escape"); !errors.Is(err, ErrMissingID) {
+		t.Fatalf("Resolve error = %v, want missing ID", err)
+	}
+	if tickets, warnings := List(root); len(tickets) != 0 || len(warnings) != 0 {
+		t.Fatalf("tickets = %#v, warnings = %#v", tickets, warnings)
 	}
 }

@@ -80,6 +80,26 @@ func TestSubcommandHelpDoesNotRequireTicketDirectory(t *testing.T) {
 	}
 }
 
+func TestCreateInExistingChildFolder(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	mustRun(t, "init")
+	child := filepath.Join(dir, ".tickets", "okta", "research")
+	if err := os.MkdirAll(child, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	id := strings.TrimSpace(mustRun(t, "create", "Nested ticket", "--folder", "okta/research"))
+	if _, err := os.Stat(filepath.Join(child, id+".md")); err != nil {
+		t.Fatalf("nested ticket missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".tickets", id+".md")); !os.IsNotExist(err) {
+		t.Fatalf("unexpected flat ticket: %v", err)
+	}
+	if output := mustRun(t, "show", id); !strings.Contains(output, "# Nested ticket") {
+		t.Fatalf("show output = %q", output)
+	}
+}
+
 func TestVersionShowsBuildMetadata(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

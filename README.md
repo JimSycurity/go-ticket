@@ -69,6 +69,10 @@ gtk add-note <id> "Implementation note"
 gtk close <id>
 ```
 
+Tickets may also live in child folders under `.tickets/`. Existing tickets stay
+in place when updated. Use `gtk create --folder okta/research "Title"` to create
+one in an existing child folder; plain `gtk create` still writes to `.tickets/`.
+
 `gtk list --json` includes absolute paths for editor integrations. Treat those
 fields as local-machine metadata because they can expose usernames or repository
 locations when copied into logs, tickets, or reports. `gtk query` intentionally

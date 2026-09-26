@@ -19,6 +19,7 @@ const (
 	MaxTicketFileBytes = 1 << 20
 	MaxNoteBytes       = 64 << 10
 	MaxSettingsBytes   = 4 << 10
+	maxScannedEntries  = 10_000
 )
 
 const SettingsFileName = "settings.json"
@@ -151,7 +152,7 @@ func Parse(root Root, path string, content string) (Ticket, error) {
 	if t.ID == "" {
 		return Ticket{}, fmt.Errorf("missing required id")
 	}
-	if _, err := ResolveTicketPath(root, t.ID, false); err != nil {
+	if err := ValidateID(t.ID); err != nil {
 		return Ticket{}, err
 	}
 
@@ -161,18 +162,9 @@ func Parse(root Root, path string, content string) (Ticket, error) {
 }
 
 func List(root Root) ([]Ticket, []Warning) {
-	entries, err := os.ReadDir(root.TicketsDir)
-	if err != nil {
-		return nil, []Warning{{Path: root.TicketsDir, Err: err}}
-	}
+	paths, warnings := ticketPaths(root)
 	var tickets []Ticket
-	var warnings []Warning
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || !strings.HasSuffix(name, ".md") {
-			continue
-		}
-		path := filepath.Join(root.TicketsDir, name)
+	for _, path := range paths {
 		info, err := os.Lstat(path)
 		if err != nil {
 			warnings = append(warnings, Warning{Path: path, Err: err})
@@ -189,6 +181,19 @@ func List(root Root) ([]Ticket, []Warning) {
 		}
 		tickets = append(tickets, ticket)
 	}
+	counts := make(map[string]int, len(tickets))
+	for _, ticket := range tickets {
+		counts[strings.ToLower(ticket.ID)]++
+	}
+	unique := tickets[:0]
+	for _, ticket := range tickets {
+		if counts[strings.ToLower(ticket.ID)] > 1 {
+			warnings = append(warnings, Warning{Path: ticket.Path, Err: fmt.Errorf("duplicate ticket ID: %s", ticket.ID)})
+			continue
+		}
+		unique = append(unique, ticket)
+	}
+	tickets = unique
 	sort.Slice(tickets, func(i, j int) bool {
 		if tickets[i].Priority != tickets[j].Priority {
 			return tickets[i].Priority < tickets[j].Priority
@@ -198,23 +203,46 @@ func List(root Root) ([]Ticket, []Warning) {
 	return tickets, warnings
 }
 
+// ticketPaths walks only real directories, so symlinked child directories are never followed.
+func ticketPaths(root Root) ([]string, []Warning) {
+	var paths []string
+	var warnings []Warning
+	entries := 0
+	err := filepath.WalkDir(root.TicketsDir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			warnings = append(warnings, Warning{Path: path, Err: walkErr})
+			return filepath.SkipDir
+		}
+		entries++
+		if entries > maxScannedEntries {
+			warnings = append(warnings, Warning{Path: path, Err: fmt.Errorf("ticket tree exceeds %d entries", maxScannedEntries)})
+			return filepath.SkipAll
+		}
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".md") {
+			paths = append(paths, path)
+		}
+		return nil
+	})
+	if err != nil {
+		warnings = append(warnings, Warning{Path: root.TicketsDir, Err: err})
+	}
+	return paths, warnings
+}
+
 func Resolve(root Root, ref string) (Ticket, error) {
 	if ref == "" {
 		return Ticket{}, ErrMissingID
 	}
-	entries, err := os.ReadDir(root.TicketsDir)
-	if err != nil {
-		return Ticket{}, err
+	paths, warnings := ticketPaths(root)
+	if len(warnings) > 0 {
+		return Ticket{}, warnings[0]
 	}
 	refKey := strings.ToLower(ref)
 	var matches []string
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
-			continue
-		}
-		base := strings.TrimSuffix(entry.Name(), ".md")
+	for _, path := range paths {
+		base := strings.TrimSuffix(filepath.Base(path), ".md")
 		if strings.HasPrefix(strings.ToLower(base), refKey) {
-			matches = append(matches, filepath.Join(root.TicketsDir, entry.Name()))
+			matches = append(matches, path)
 		}
 	}
 	if len(matches) == 0 {
@@ -234,11 +262,59 @@ func Write(root Root, t Ticket) error {
 	if err != nil {
 		return err
 	}
+	return writeAtPath(t, path)
+}
+
+// WriteNewInSubdir creates a ticket in an existing child directory without moving an existing ID.
+func WriteNewInSubdir(root Root, t Ticket, subdir string) error {
+	if subdir == "" || filepath.IsAbs(subdir) || strings.Contains(subdir, "\\") {
+		return fmt.Errorf("invalid ticket folder: %q", subdir)
+	}
+	for _, part := range strings.Split(subdir, "/") {
+		if !validFolderPart(part) {
+			return fmt.Errorf("invalid ticket folder: %q", subdir)
+		}
+	}
+	if _, err := ResolveTicketPath(root, t.ID, true); !errors.Is(err, os.ErrNotExist) {
+		if err == nil {
+			return fmt.Errorf("ticket already exists: %s", t.ID)
+		}
+		return err
+	}
+	directory := root.TicketsDir
+	for _, part := range strings.Split(subdir, "/") {
+		directory = filepath.Join(directory, part)
+		info, err := os.Lstat(directory)
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("ticket folder is not a real directory: %s", directory)
+		}
+	}
+	return writeAtPath(t, filepath.Join(directory, t.ID+".md"))
+}
+
+func validFolderPart(part string) bool {
+	if part == "" || part == "." || part == ".." || strings.HasSuffix(part, ".") || strings.HasSuffix(part, " ") || strings.ContainsAny(part, `<>:"|?*`) {
+		return false
+	}
+	for _, char := range part {
+		if unicode.IsControl(char) {
+			return false
+		}
+	}
+	windowsBase, _, _ := strings.Cut(part, ".")
+	_, reserved := windowsReservedNames[strings.ToUpper(windowsBase)]
+	return !reserved
+}
+
+func writeAtPath(t Ticket, path string) error {
 	content, err := RenderForWrite(t)
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(root.TicketsDir, "."+t.ID+".*.tmp")
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+t.ID+".*.tmp")
 	if err != nil {
 		return err
 	}
